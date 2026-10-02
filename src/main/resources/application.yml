@@ -3,9 +3,9 @@ spring:
     name: minijuego-service
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:minijuego}
-    username: ${DB_USER:minijuego}
-    password: ${DB_PASSWORD:minijuego}
+    url: jdbc:postgresql://${PGHOST:${DB_HOST:localhost}}:${PGPORT:${DB_PORT:5433}}/${PGDATABASE:${DB_NAME:minijuego}}
+    username: ${PGUSER:${DB_USER:minijuego}}
+    password: ${PGPASSWORD:${DB_PASSWORD:minijuego}}
     hikari:
       maximum-pool-size: 10
 
@@ -24,8 +24,9 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6380}
+      host: ${REDISHOST:${REDIS_HOST:localhost}}
+      port: ${REDISPORT:${REDIS_PORT:6380}}
+      password: ${REDISPASSWORD:${REDIS_PASSWORD:}}
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}

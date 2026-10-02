@@ -1,0 +1,43 @@
+services:
+  minijuego-db:
+    image: postgres:16-alpine
+    container_name: minijuego-db
+    environment:
+      POSTGRES_DB: minijuego
+      POSTGRES_USER: minijuego
+      POSTGRES_PASSWORD: minijuego
+    ports:
+      - "5433:5432"   # distinto del 5432 por defecto: no choca con mapa-descubrimiento-service en el mismo laptop
+    volumes:
+      - minijuego-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minijuego"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: minijuego-redis
+    ports:
+      - "6380:6379"   # distinto del 6379 por defecto, mismo motivo
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: minijuego-rabbitmq
+    ports:
+      - "5673:5672"    # AMQP, distinto del 5672 por defecto
+      - "15673:15672"  # panel de administración: http://localhost:15673 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  minijuego-db-data:

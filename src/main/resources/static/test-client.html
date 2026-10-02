@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minijuego Planazo — cliente de prueba</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #111827; color: #e5e7eb; margin: 0; padding: 16px; }
+  h1 { font-size: 18px; color: #93c5fd; margin: 0 0 12px; }
+  h2 { font-size: 14px; color: #9ca3af; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; }
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: #1f2937; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  select, button { padding: 7px 12px; border-radius: 6px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font: inherit; }
+  button { cursor: pointer; background: #2563eb; border: none; }
+  button.secundario { background: #374151; }
+  button:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+  .sala { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: #111827; margin-bottom: 6px; border: 1px solid transparent; }
+  .sala.actual { border-color: #2563eb; }
+  .sala small { color: #9ca3af; display: block; }
+  .chip { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #374151; }
+  .chip.EN_CURSO { background: #b45309; } .chip.CUENTA_REGRESIVA { background: #7c3aed; } .chip.ESPERANDO_JUGADORES { background: #065f46; }
+  .jugador { display: flex; justify-content: space-between; padding: 5px 8px; border-left: 4px solid; background: #111827; border-radius: 4px; margin-bottom: 4px; font-size: 14px; }
+  .jugador.yo { font-weight: 600; }
+  canvas { background: #0b0f17; border: 2px solid #374151; display: block; max-width: 100%; height: auto; }
+  #log { font-size: 12px; color: #9ca3af; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+  .ayuda { font-size: 13px; color: #9ca3af; line-height: 1.5; }
+  kbd { background: #374151; border-radius: 3px; padding: 1px 5px; font-size: 12px; }
+  #conexion { font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>🐍 Minijuego Planazo — cliente de prueba</h1>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h2>1. Usuario</h2>
+        <div class="fila">
+          <select id="selUsuario"></select>
+          <button id="btnToken">Entrar</button>
+        </div>
+        <div class="fila"><span id="estadoToken">Sin autenticar</span> <span id="conexion"></span></div>
+        <div class="ayuda">Para probar el multijugador abre otra ventana con esta misma página y elige un usuario <b>distinto</b> en cada una.</div>
+      </div>
+
+      <div class="panel">
+        <h2>2. Salas (en vivo)</h2>
+        <div id="salas" class="ayuda">Entra con un usuario para ver las salas.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="fila">
+          <b id="tituloSala">Sin sala</b>
+          <button class="secundario" id="btnSalir" disabled>Salir de la sala</button>
+          <span id="tiempo" class="ayuda"></span>
+        </div>
+        <canvas id="tablero" width="480" height="360"></canvas>
+        <div class="ayuda" style="margin-top:8px">
+          Cada tecla (<kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> o <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>) mueve tu serpiente una celda;
+          mantenla presionada para avanzar seguido. Si no tocas nada, tu serpiente se queda quieta.
+          Solo la ventana con el foco recibe las teclas. La partida empieza sola cuando la sala está <b>llena</b>.
+          Si tu cabeza toca un borde o cualquier cuerpo, mueres; gana la última serpiente en pie.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Jugadores</h2>
+        <div id="jugadores" class="ayuda">—</div>
+      </div>
+
+      <div class="panel"><div id="log">Listo. Elige un usuario y pulsa «Entrar».</div></div>
+    </div>
+  </div>
+
+<script>
+const CELDA = 20, ANCHO = 24, ALTO = 18;
+const COLORES = ['#22c55e', '#3b82f6', '#f97316', '#e11d48', '#a855f7', '#14b8a6'];
+const TECLAS = {
+  ArrowUp: 'ARRIBA', ArrowDown: 'ABAJO', ArrowLeft: 'IZQUIERDA', ArrowRight: 'DERECHA',
+  w: 'ARRIBA', s: 'ABAJO', a: 'IZQUIERDA', d: 'DERECHA', W: 'ARRIBA', S: 'ABAJO', A: 'IZQUIERDA', D: 'DERECHA'
+};
+
+// Estado de ESTA ventana. sessionStorage es por pestaña: cada ventana tiene su
+// propio usuario, y una recarga vuelve a entrar sola (prueba de SNK-07).
+let token = null, jugadorId = null, jugadorNombre = null;
+let salaActualId = null, subSala = null, stomp = null, ultimoEstado = null, ultimoResultado = null;
+let reintento = null;
+
+const $ = (id) => document.getElementById(id);
+const log = (msg) => { $('log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + $('log').textContent.slice(0, 3000); };
+const auth = () => ({ 'Authorization': 'Bearer ' + token });
+const guardar = () => { try { sessionStorage.setItem('minijuego', JSON.stringify({ token, jugadorId, jugadorNombre, salaActualId })); } catch (e) {} };
+
+async function cargarUsuarios() {
+  const res = await fetch('/api/v1/auth/usuarios-de-prueba');
+  const body = await res.json();
+  $('selUsuario').innerHTML = body.data.map(u => `<option value="${u.jugadorId}">${u.nombre} (${u.jugadorId})</option>`).join('');
+}
+
+async function entrar() {
+  if (salaActualId) await salirDeSala();
+  desconectar();
+  const res = await fetch('/api/v1/auth/dev-token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jugadorId: $('selUsuario').value })
+  });
+  const body = await res.json();
+  if (!res.ok) { log('Error obteniendo token: ' + (body.mensaje || JSON.stringify(body))); return; }
+  token = body.data.token; jugadorId = body.data.jugadorId; jugadorNombre = body.data.jugadorNombre;
+  guardar();
+  mostrarUsuario();
+  log(`JWT obtenido para ${jugadorNombre}.`);
+  await refrescarSalas();
+  conectar();
+}
+
+function mostrarUsuario() {
+  $('estadoToken').textContent = `✅ ${jugadorNombre}`;
+  document.title = `${jugadorNombre} — Minijuego`;
+  $('selUsuario').value = jugadorId;
+}
+
+async function refrescarSalas() {
+  const res = await fetch('/api/v1/salas', { headers: auth() });
+  if (res.ok) pintarSalas((await res.json()).data);
+  return res.ok;
+}
+
+// ---------- WebSocket ----------
+function conectar() {
+  clearTimeout(reintento);
+  stomp = Stomp.over(new SockJS('/ws'));
+  stomp.debug = null;
+  $('conexion').textContent = '⏳ conectando…';
+  stomp.connect({ Authorization: 'Bearer ' + token }, async () => {
+    $('conexion').textContent = '🟢 en línea';
+    stomp.subscribe('/topic/salas', (m) => pintarSalas(JSON.parse(m.body)));
+    stomp.subscribe('/user/queue/errores', (m) => log('⚠️ ' + JSON.parse(m.body).mensaje));
+    if (salaActualId) await unirse(salaActualId, true); // reconexión: volver a la misma sala
+  }, () => {
+    $('conexion').textContent = '🔴 desconectado — reintentando…';
+    subSala = null;
+    if (token) reintento = setTimeout(conectar, 2000);
+  });
+}
+
+function desconectar() {
+  clearTimeout(reintento);
+  if (stomp) { const s = stomp; stomp = null; try { s.disconnect(); } catch (e) {} }
+  subSala = null;
+}
+
+const conectado = () => stomp && stomp.connected;
+
+// ---------- Salas ----------
+function pintarSalas(salas) {
+  $('salas').innerHTML = salas.map(s => {
+    const esActual = s.id === salaActualId;
+    const lleno = s.cantidadJugadores >= s.capacidad;
+    const puede = !esActual && !lleno && s.estado !== 'EN_CURSO';
+    const nombres = s.nombresJugadores.length ? s.nombresJugadores.join(', ') : 'vacía';
+    return `<div class="sala ${esActual ? 'actual' : ''}">
+      <div><b>${s.codigo}</b> <span class="chip ${s.estado}">${textoEstado(s.estado)}</span>
+        <small>${s.cantidadJugadores}/${s.capacidad} jugadores${s.estado === 'ESPERANDO_JUGADORES' ? ` · faltan ${s.capacidad - s.cantidadJugadores}` : ''}</small>
+        <small>${nombres}</small></div>
+      <button data-sala="${s.id}" ${puede ? '' : 'disabled'}>${esActual ? 'Aquí' : lleno ? 'Llena' : 'Unirme'}</button>
+    </div>`;
+  }).join('');
+  $('salas').querySelectorAll('button[data-sala]').forEach(b => b.onclick = () => unirse(b.dataset.sala));
+}
+
+function textoEstado(e) {
+  return { ESPERANDO_JUGADORES: 'esperando', CUENTA_REGRESIVA: 'arrancando', EN_CURSO: 'en partida', FINALIZADA: 'finalizada' }[e] || e;
+}
+
+async function unirse(salaId, esReconexion = false) {
+  if (!conectado()) { log('Aún no hay conexión WebSocket, espera un momento.'); return; }
+  const res = await fetch(`/api/v1/salas/${salaId}/jugadores`, { method: 'POST', headers: auth() });
+  const body = await res.json();
+  if (!res.ok) {
+    log('No se pudo unir: ' + (body.mensaje || JSON.stringify(body)));
+    if (esReconexion) { salaActualId = null; guardar(); limpiarSala(); }
+    return;
+  }
+  if (subSala) subSala.unsubscribe();
+  salaActualId = salaId; ultimoResultado = null; guardar();
+  // Primero suscribirse y luego registrar la sesión: el servidor responde al
+  // registro difundiendo el estado actual, que así llega a esta ventana.
+  subSala = stomp.subscribe(`/topic/salas/${salaId}`, (m) => dibujarEstado(JSON.parse(m.body)));
+  stomp.send(`/app/salas/${salaId}/registrar-sesion`, {}, '{}');
+  $('btnSalir').disabled = false;
+  const faltan = body.data.capacidad - body.data.cantidadJugadores;
+  log(`${esReconexion ? 'Reconectado a' : 'Unido a'} ${body.data.codigo}.` + (faltan > 0 ? ` Faltan ${faltan} jugador(es) para empezar.` : ''));
+  await refrescarSalas();
+}
+
+async function salirDeSala() {
+  if (!salaActualId) return;
+  const salaId = salaActualId;
+  if (subSala) { subSala.unsubscribe(); subSala = null; }
+  salaActualId = null; guardar();
+  await fetch(`/api/v1/salas/${salaId}/jugadores/${jugadorId}`, { method: 'DELETE', headers: auth() });
+  limpiarSala();
+  log('Saliste de la sala.');
+}
+
+function limpiarSala() {
+  ultimoEstado = null; ultimoResultado = null;
+  $('tituloSala').textContent = 'Sin sala';
+  $('btnSalir').disabled = true;
+  $('jugadores').textContent = '—'; $('tiempo').textContent = '';
+  dibujarVacio('Elige una sala para jugar');
+}
+
+// ---------- Teclado ----------
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'SELECT') return;
+  const direccion = TECLAS[e.key];
+  if (!direccion || !conectado() || !salaActualId) return;
+  e.preventDefault();
+  // Cada pulsación (y cada repetición al mantenerla) es un paso; el servidor limita a 10 pasos/seg.
+  if (ultimoEstado && ultimoEstado.estado === 'EN_CURSO') {
+    stomp.send(`/app/salas/${salaActualId}/mover`, {}, JSON.stringify({ direccion }));
+  }
+});
+
+// ---------- Dibujo ----------
+const ctx = $('tablero').getContext('2d');
+
+function dibujarVacio(texto) {
+  ctx.fillStyle = '#0b0f17'; ctx.fillRect(0, 0, ANCHO * CELDA, ALTO * CELDA);
+  rotulo(texto);
+}
+
+function rotulo(texto, sub, grande) {
+  ctx.fillStyle = 'rgba(11,15,23,.72)'; ctx.fillRect(0, 0, ANCHO * CELDA, ALTO * CELDA);
+  ctx.fillStyle = '#e5e7eb'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = grande ? 'bold 96px system-ui' : 'bold 22px system-ui';
+  ctx.fillText(texto, ANCHO * CELDA / 2, ALTO * CELDA / 2 - (sub ? 16 : 0));
+  if (sub) { ctx.font = '15px system-ui'; ctx.fillStyle = '#9ca3af'; ctx.fillText(sub, ANCHO * CELDA / 2, ALTO * CELDA / 2 + (grande ? 64 : 18)); }
+}
+
+function dibujarEstado(estado) {
+  ultimoEstado = estado;
+  if (estado.resultado) ultimoResultado = estado.resultado;
+  if (estado.estado === 'EN_CURSO') ultimoResultado = null;
+
+  // Color fijo por orden de llegada, no por puntaje: así no cambia a mitad de partida.
+  const color = {};
+  estado.jugadores.forEach((j, i) => color[j.jugadorId] = COLORES[i % COLORES.length]);
+  const yo = estado.jugadores.find(j => j.jugadorId === jugadorId);
+  const faltan = estado.capacidad - estado.jugadores.length;
+
+  $('tituloSala').textContent = `${estado.salaCodigo} · ${textoEstado(estado.estado)} · ${estado.jugadores.length}/${estado.capacidad}`;
+  $('tiempo').textContent = estado.estado === 'EN_CURSO' ? `⏱ ${estado.tiempoRestanteSegundos}s` : '';
+
+  ctx.fillStyle = '#0b0f17'; ctx.fillRect(0, 0, ANCHO * CELDA, ALTO * CELDA);
+  ctx.strokeStyle = '#151c2c'; ctx.lineWidth = 1;
+  for (let x = 0; x <= ANCHO; x++) { ctx.beginPath(); ctx.moveTo(x * CELDA, 0); ctx.lineTo(x * CELDA, ALTO * CELDA); ctx.stroke(); }
+  for (let y = 0; y <= ALTO; y++) { ctx.beginPath(); ctx.moveTo(0, y * CELDA); ctx.lineTo(ANCHO * CELDA, y * CELDA); ctx.stroke(); }
+
+  if (estado.comida) {
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(estado.comida.x * CELDA + CELDA / 2, estado.comida.y * CELDA + CELDA / 2, CELDA / 2 - 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Primero las muertas (debajo), luego las vivas, y la mía al final (encima).
+  [...estado.jugadores].sort((a, b) => peso(a) - peso(b))
+    .forEach(j => dibujarSerpiente(j, j.estado === 'ELIMINADA' ? '#4b5563' : color[j.jugadorId]));
+
+  if (estado.estado === 'CUENTA_REGRESIVA') {
+    rotulo(String(estado.segundosCuentaRegresiva || '¡Ya!'),
+      ultimoResultado ? `${textoResultado(ultimoResultado)} · revancha en…` : '¡Sala llena! Prepárate…', true);
+  } else if (ultimoResultado) {
+    rotulo(textoResultado(ultimoResultado), faltan > 0 ? `Esperando ${faltan} jugador(es) para la revancha` : '');
+  } else if (estado.estado === 'ESPERANDO_JUGADORES') {
+    rotulo(`Esperando jugadores ${estado.jugadores.length}/${estado.capacidad}`,
+      `Faltan ${faltan}: la partida empieza cuando la sala esté llena`);
+  } else if (yo && yo.estado === 'ELIMINADA') {
+    rotulo('Te eliminaron 💥', 'Mira cómo termina la partida');
+  }
+
+  const textoEstadoSerpiente = { VIVA: 'viva', ELIMINADA: 'eliminada 💀', DESCONECTADA_CONGELADA: 'congelada ❄️' };
+  $('jugadores').innerHTML = [...estado.jugadores]
+    .sort((a, b) => b.puntaje - a.puntaje)
+    .map(j => {
+      const marca = estado.estado === 'EN_CURSO' || ultimoResultado
+        ? `${j.puntaje} pts · ${textoEstadoSerpiente[j.estado] || j.estado}`
+        : 'en la sala';
+      return `<div class="jugador ${j.jugadorId === jugadorId ? 'yo' : ''}" style="border-color:${color[j.jugadorId]}">
+        <span>${j.jugadorNombre}${j.jugadorId === jugadorId ? ' (tú)' : ''}${j.conectado ? '' : ' 📴'}</span><span>${marca}</span></div>`;
+    }).join('') || '—';
+}
+
+const peso = (j) => j.jugadorId === jugadorId ? 2 : (j.estado === 'ELIMINADA' ? 0 : 1);
+const textoResultado = (r) => `🏆 ${r.ganadorJugadorNombre || 'Nadie'} gana`;
+
+/** Cuerpo continuo (segmentos unidos) y cabeza con ojos mirando hacia donde va. */
+function dibujarSerpiente(j, color) {
+  const cuerpo = j.cuerpo;
+  if (!cuerpo.length) return;
+  ctx.globalAlpha = j.estado === 'ELIMINADA' ? 0.3 : (j.estado === 'DESCONECTADA_CONGELADA' ? 0.45 : 1);
+  ctx.fillStyle = color;
+  const m = 3; // margen interno del cuerpo
+  for (let i = cuerpo.length - 1; i >= 1; i--) {
+    const a = cuerpo[i], b = cuerpo[i - 1];
+    // rectángulo que une cada segmento con el siguiente: se ve una sola pieza
+    const x = Math.min(a.x, b.x) * CELDA + m, y = Math.min(a.y, b.y) * CELDA + m;
+    const w = (Math.abs(a.x - b.x) + 1) * CELDA - 2 * m, h = (Math.abs(a.y - b.y) + 1) * CELDA - 2 * m;
+    ctx.fillRect(x, y, w, h);
+  }
+  const c = cuerpo[0];
+  ctx.fillRect(c.x * CELDA + 1, c.y * CELDA + 1, CELDA - 2, CELDA - 2);
+  if (j.estado !== 'ELIMINADA') {
+    const d = { ARRIBA: [0, -1], ABAJO: [0, 1], IZQUIERDA: [-1, 0], DERECHA: [1, 0] }[j.direccion] || [1, 0];
+    const cx = c.x * CELDA + CELDA / 2, cy = c.y * CELDA + CELDA / 2;
+    [-1, 1].forEach(lado => {
+      const ex = cx + d[0] * 4 + d[1] * lado * 4, ey = cy + d[1] * 4 + d[0] * lado * 4;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, ey, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex + d[0], ey + d[1], 1.5, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  if (j.jugadorId === jugadorId) { // marca "tú"
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(c.x * CELDA, c.y * CELDA, CELDA, CELDA); ctx.lineWidth = 1;
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Arranque ----------
+$('btnToken').onclick = entrar;
+$('btnSalir').onclick = salirDeSala;
+
+(async () => {
+  await cargarUsuarios();
+  dibujarVacio('Entra con un usuario');
+  let guardado = null;
+  try { guardado = JSON.parse(sessionStorage.getItem('minijuego')); } catch (e) {}
+  if (guardado && guardado.token) {
+    ({ token, jugadorId, jugadorNombre, salaActualId } = guardado);
+    mostrarUsuario();
+    if (await refrescarSalas()) {
+      log(`Sesión recuperada como ${jugadorNombre}.`);
+      conectar();
+    } else { // el JWT venció: empezar de cero
+      token = jugadorId = jugadorNombre = salaActualId = null;
+      try { sessionStorage.removeItem('minijuego'); } catch (e) {}
+      $('estadoToken').textContent = 'Sesión vencida, vuelve a entrar';
+    }
+  }
+})();
+</script>
+</body>
+</html>

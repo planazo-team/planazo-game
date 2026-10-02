@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: minijuego-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:minijuego}
+    username: ${DB_USER:minijuego}
+    password: ${DB_PASSWORD:minijuego}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway es la única fuente de verdad del esquema, nunca Hibernate.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5673}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${SERVER_PORT:8082}
+
+planazo:
+  seguridad:
+    jwt:
+      # SOLO para desarrollo local. En cualquier otro ambiente se sobrescribe
+      # con la variable de entorno JWT_SECRETO (ver .env.example) y debe ser
+      # EXACTAMENTE el mismo secreto que usa el microservicio de Registro y
+      # autenticación para firmar sus JWT reales — de eso depende que este
+      # servicio pueda validar tokens emitidos por el otro.
+      secreto: ${JWT_SECRETO:cambia-este-secreto-de-desarrollo-minijuego-planazo-32b}
+      expiracion-minutos-dev-token: 120
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.planazo.minijuego: INFO

@@ -1,10 +1,8 @@
-node_modules
-dist
+target/
+*.class
+.idea/
+*.iml
+.vscode/
 .env
-.env.*
-!.env.example
-coverage
-*.log
-.idea
-.vscode
 .DS_Store
+HELP.md

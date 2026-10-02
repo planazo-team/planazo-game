@@ -1,21 +1,27 @@
 package com.planazo.minijuego.infrastructure.adapter.out.messaging.publisher;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planazo.minijuego.domain.model.PuntajeJugador;
 import com.planazo.minijuego.domain.model.ResultadoPartida;
 import com.planazo.minijuego.domain.port.out.EventPublisherPort;
-import com.planazo.minijuego.infrastructure.adapter.out.messaging.event.DomainEvent;
 import com.planazo.minijuego.infrastructure.adapter.out.messaging.event.PartidaFinalizadaEventData;
-import com.planazo.minijuego.infrastructure.config.RabbitMQConfig;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.planazo.minijuego.infrastructure.adapter.out.messaging.event.RealtimeEvent;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class PartidaEventPublisherAdapter implements EventPublisherPort {
 
-    private final RabbitTemplate rabbitTemplate;
+    private static final String CHANNEL = "planazo.events";
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
-    public PartidaEventPublisherAdapter(RabbitTemplate rabbitTemplate) {
-        this.rabbitTemplate = rabbitTemplate;
+    public PartidaEventPublisherAdapter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -35,12 +41,18 @@ public class PartidaEventPublisherAdapter implements EventPublisherPort {
                 resultado.finalizadaEn()
         );
 
-        DomainEvent<PartidaFinalizadaEventData> evento = DomainEvent.de("PartidaFinalizada", payload);
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_EVENTOS,
-                "minijuego.partida.finalizada",
-                evento
+        RealtimeEvent event = RealtimeEvent.of(
+                "GAME.PARTIDA_FINALIZADA",
+                List.of("global"),
+                payload
         );
+
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            redisTemplate.convertAndSend(CHANNEL, json);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error serializando evento de partida finalizada para Redis", e);
+        }
     }
 
     private PartidaFinalizadaEventData.LineaPuntaje aLineaPuntaje(PuntajeJugador puntaje) {
@@ -49,3 +61,4 @@ public class PartidaEventPublisherAdapter implements EventPublisherPort {
         );
     }
 }
+

@@ -31,11 +31,6 @@ spring:
       password: ${REDISPASSWORD:${REDIS_PASSWORD:}}
       database: 1
 
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5673}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
 
   jackson:
     serialization:

@@ -70,11 +70,7 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- EDA: publica PartidaFinalizada hacia planazo.events -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-amqp</artifactId>
-        </dependency>
+
 
         <!-- Seguridad stateless por JWT (HS256 compartido, ver ARQUITECTURA.md) -->
         <dependency>

@@ -38,6 +38,7 @@ spring:
 
 server:
   port: ${SERVER_PORT:8082}
+  forward-headers-strategy: framework
 
 planazo:
   seguridad:

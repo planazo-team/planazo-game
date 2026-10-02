@@ -15,18 +15,21 @@ spring:
     open-in-view: false
     properties:
       hibernate:
+        default_schema: minijuego
         jdbc:
           time_zone: UTC
 
   flyway:
     enabled: true
     locations: classpath:db/migration
+    default-schema: minijuego
 
   data:
     redis:
       host: ${REDISHOST:${REDIS_HOST:localhost}}
       port: ${REDISPORT:${REDIS_PORT:6380}}
       password: ${REDISPASSWORD:${REDIS_PASSWORD:}}
+      database: 1
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}

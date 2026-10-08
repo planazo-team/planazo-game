@@ -27,17 +27,5 @@ services:
       timeout: 5s
       retries: 10
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: minijuego-rabbitmq
-    ports:
-      - "5673:5672"    # AMQP, distinto del 5672 por defecto
-      - "15673:15672"  # panel de administración: http://localhost:15673 (guest/guest)
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-
 volumes:
   minijuego-db-data:

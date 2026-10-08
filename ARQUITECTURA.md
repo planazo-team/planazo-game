@@ -18,8 +18,12 @@ remite al servicio hermano para lo que es idéntico.
 
 **2. Abstracción de servicios.** Lo único público hacia afuera del
 microservicio es el contrato REST versionado (`/api/v1/...`), los
-mensajes STOMP (`/topic/salas/{id}`, `/app/salas/{id}/...`) y el evento
-`PartidaFinalizada` en `planazo.events`. Nadie fuera de este servicio ve
+comandos STOMP (`/app/salas/{id}/...`, errores en `/user/queue/errores`)
+y los eventos que publica en `planazo.events`: `GAME.STATE_UPDATE`
+(snapshot de cada tick, tópico `salas:<id>`), `LOBBY.ROOMS_UPDATE`
+(tópico `salas`) y `GAME.PARTIDA_FINALIZADA` (tópico `global`). Desde el
+cambio al bus (octubre), el estado ya no se difunde por
+`/topic/salas/{id}`: lo reparte `planazo-realtime`. Nadie fuera de este servicio ve
 sus tablas ni sus clases internas — ni siquiera el estado en memoria del
 game loop.
 
@@ -47,21 +51,23 @@ prueba (`/test-client.html`) documenta, jugando, el protocolo STOMP.
 Resource Server / JWT para autenticación (con una particularidad: HS256
 con secreto compartido en vez de descubrimiento OIDC — ver más abajo);
 STOMP sobre WebSocket (protocolo estándar, no un formato inventado);
-AMQP con el mismo sobre `DomainEvent` que el resto de Planazo.
+Redis pub/sub con el mismo sobre `{ id, type, topics, payload, at }` que
+el resto de Planazo (`RealtimeEvent`), para que `realtime` lo entienda
+sin conocer este servicio. RabbitMQ se retiró en octubre.
 
 ## Por qué JWT HS256 con secreto compartido, y no OIDC por `issuer-uri`
 
-`mapa-descubrimiento-service` valida contra el `issuer-uri` del
-microservicio de Registro y autenticación (descubrimiento OIDC
-estándar). Este servicio necesita poder levantarse y probarse **solo**,
-sin que ese otro microservicio esté corriendo — así lo pidió el equipo
+En Planazo el JWT lo firma `planazo-api-gateway` con un secreto HS256
+compartido; no hay proveedor OIDC. Este servicio necesita poder
+levantarse y probarse **solo**, sin que el gateway esté corriendo — así lo pidió el equipo
 explícitamente para poder hacer pruebas funcionales por Swagger o
 jugando de verdad sin depender de nadie más. Un `NimbusJwtDecoder` con
 una clave HS256 compartida por configuración logra exactamente eso: en
-producción, ambos servicios comparten el mismo secreto (`JWT_SECRETO`) y
-un token real, emitido por el servicio de autenticación, es válido aquí
-sin cambiar una línea de código — el día que ese servicio exista, este
-no necesita ningún cambio, solo la variable de entorno correcta.
+producción, el gateway y este servicio comparten el mismo secreto
+(`JWT_SECRET` allá, `JWT_SECRETO` aquí) y un token emitido por el gateway
+es válido aquí sin cambiar una línea de código. Así quedó configurado en
+Railway el 8 de octubre: el gateway además incluye el claim `nombre`, que
+es el que este servicio lee como nombre del jugador.
 
 `DevJwtTokenService` + `POST /api/v1/auth/dev-token` son el atajo de
 **solo desarrollo** que hace esto posible hoy: firman un JWT con la
@@ -138,9 +144,10 @@ este servicio prohíbe.
 Idénticas a `mapa-descubrimiento-service` — recursos en plural,
 sub-recursos para jerarquía, `GET` nunca muta, códigos HTTP estándar,
 versionado explícito, sobre `DomainEvent` con metadatos de trazabilidad.
-Una diferencia: este servicio, en esta primera pasada, solo **publica**
-eventos (`PartidaFinalizada`), no consume ninguno — por eso no hay
-todavía una tabla `processed_events` de idempotencia. Se agrega el día
+Una diferencia: este servicio solo **publica** eventos
+(`GAME.STATE_UPDATE`, `LOBBY.ROOMS_UPDATE`, `GAME.PARTIDA_FINALIZADA`),
+no consume ninguno — por eso no hay todavía una tabla `processed_events`
+de idempotencia. Se agrega el día
 que este servicio necesite reaccionar a un evento de otro microservicio
 de Planazo, siguiendo el mismo patrón.
 

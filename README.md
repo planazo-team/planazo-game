@@ -37,6 +37,7 @@ El servicio queda en `http://localhost:8082`.
 
 ### Camino 1: pruebas funcionales por Swagger (el contrato REST)
 
+0. Arranca con el perfil `dev` (`SPRING_PROFILES_ACTIVE=dev`) o con `DEV_TOKEN_HABILITADO=true`: fuera de eso `dev-token` no existe (404).
 1. Abre `http://localhost:8082/swagger-ui.html`.
 2. `GET /api/v1/auth/usuarios-de-prueba` — copia un `jugadorId` (p.ej. `j-ana`).
 3. `POST /api/v1/auth/dev-token` con `{"jugadorId": "j-ana"}` — copia el `token` de la respuesta.
@@ -148,13 +149,14 @@ En Planazo los jugadores son los nueve usuarios semilla del gateway (`u1`…`u6`
 ## De aquí a producción
 
 - ✅ `JWT_SECRETO` ya es el mismo secreto del gateway en Railway (hecho el 8 oct).
-- Decidir si `AuthDevController` (el endpoint `/api/v1/auth/dev-token`)
-  se apaga por completo en producción, o se deja detrás de un perfil
-  Spring que nunca se active fuera de `dev`/`local`. Hoy está siempre
-  activo porque el equipo necesita poder demostrar el servicio sin el
-  microservicio de autenticación real corriendo.
-- Restringir `SecurityConfig.corsConfigurationSource()` a los orígenes
-  reales del Panel del establecimiento en vez de `*`.
+- ✅ `AuthDevController` (`/api/v1/auth/dev-token`) solo existe con
+  `DEV_TOKEN_HABILITADO=true` o el perfil `dev`; en producción responde 404
+  (12 oct).
+- ✅ CORS y el endpoint STOMP aceptan solo `CORS_ORIGINS` (por defecto
+  localhost:3000 y el frontend de Vercel con sus previews) (12 oct).
+- ✅ Salas de duelo (`V2__salas_de_duelo.sql`): `Duelo Zona G` y
+  `Duelo Zona T` para 2 jugadores y `Tierra-616` para 3, para que pocas
+  personas puedan jugar sin esperar una sala de 4 o 6 (12 oct).
 - Revisar `Sala.ANCHO_TABLERO`/`ALTO_TABLERO`/`SEGUNDOS_LIMITE_PARTIDA`:
   hoy son constantes; la historia Should "rondas cronometradas" pediría
   hacerlas configurables por sala.

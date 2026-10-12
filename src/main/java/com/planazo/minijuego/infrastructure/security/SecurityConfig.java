@@ -1,5 +1,6 @@
 package com.planazo.minijuego.infrastructure.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -28,9 +29,12 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtProperties jwtProperties;
+    private final List<String> origenesPermitidos;
 
-    public SecurityConfig(JwtProperties jwtProperties) {
+    public SecurityConfig(JwtProperties jwtProperties,
+                          @Value("${planazo.cors.origenes}") List<String> origenesPermitidos) {
         this.jwtProperties = jwtProperties;
+        this.origenesPermitidos = origenesPermitidos;
     }
 
     @Bean
@@ -61,16 +65,14 @@ public class SecurityConfig {
     }
 
     /**
-     * Permisivo a propósito: este servicio no sirve todavía un Panel en
-     * producción desde otro origen, pero durante el desarrollo es común
-     * probarlo desde un frontend en {@code localhost} con otro puerto.
-     * Si este servicio llega a producción expuesto a internet, esta
-     * configuración debe restringirse a los orígenes reales del Panel.
+     * Solo los orígenes del frontend (CORS_ORIGINS, separados por coma).
+     * Acepta patrones como {@code https://planazo-frontend-*.vercel.app} para
+     * los previews de Vercel. El WebSocket STOMP pasa por la misma regla.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOriginPatterns(origenesPermitidos.stream().map(String::trim).filter(o -> !o.isEmpty()).toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -1,12 +1,15 @@
 package com.planazo.minijuego.infrastructure.config;
 
 import com.planazo.minijuego.infrastructure.security.StompAuthChannelInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+import java.util.List;
 
 /**
  * RT-3: tiempo real del Minijuego sobre STOMP. {@code /topic/salas/{id}}
@@ -22,15 +25,19 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketStompConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+    private final List<String> origenesPermitidos;
 
-    public WebSocketStompConfig(StompAuthChannelInterceptor stompAuthChannelInterceptor) {
+    public WebSocketStompConfig(StompAuthChannelInterceptor stompAuthChannelInterceptor,
+                                @Value("${planazo.cors.origenes}") List<String> origenesPermitidos) {
         this.stompAuthChannelInterceptor = stompAuthChannelInterceptor;
+        this.origenesPermitidos = origenesPermitidos;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
+                // Los mismos orígenes que el CORS de la API (planazo.cors.origenes).
+                .setAllowedOriginPatterns(origenesPermitidos.stream().map(String::trim).filter(o -> !o.isEmpty()).toArray(String[]::new))
                 .withSockJS();
         // Procesa los frames de cada cliente en el orden en que llegaron: sin esto,
         // "suscribirse" y "registrar-sesion" pueden procesarse al revés y el

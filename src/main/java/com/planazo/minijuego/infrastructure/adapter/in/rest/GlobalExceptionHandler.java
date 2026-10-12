@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Traduce cada {@link DomainException} a un código HTTP estándar — esta
@@ -69,6 +71,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> manejarIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.de("SOLICITUD_INVALIDA", ex.getMessage()));
+    }
+
+    /** Ruta que no existe (p. ej. /auth/dev-token con el controlador apagado): 404, no 500. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> manejarRutaInexistente(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiError.de("RUTA_NO_EXISTE", "La ruta no existe."));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> manejarMetodoNoSoportado(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiError.de("METODO_NO_PERMITIDO", ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

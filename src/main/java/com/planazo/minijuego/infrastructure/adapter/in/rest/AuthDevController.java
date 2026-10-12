@@ -6,6 +6,7 @@ import com.planazo.minijuego.infrastructure.security.DevJwtTokenService;
 import com.planazo.minijuego.infrastructure.security.UsuarioDePrueba;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,9 +20,12 @@ import java.util.List;
  * queda expuesto sin autenticación en un ambiente real: este servicio no
  * se despliega tal cual a producción sin apagar este controlador o
  * reemplazar el {@code JwtDecoder} por uno que valide contra el emisor
- * real (ver README, sección "De aquí a producción").
+ * real (ver README, sección "De aquí a producción"). Solo existe si
+ * {@code planazo.seguridad.dev-token.habilitado=true} (DEV_TOKEN_HABILITADO):
+ * apagado por defecto, encendido en el perfil {@code dev}.
  */
 @RestController
+@ConditionalOnProperty(name = "planazo.seguridad.dev-token.habilitado", havingValue = "true")
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Auth (solo desarrollo)", description = "Emisión de JWT de prueba para los usuarios pre-seedeados")
 public class AuthDevController {

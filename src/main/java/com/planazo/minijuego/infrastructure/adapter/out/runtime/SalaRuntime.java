@@ -12,11 +12,7 @@ import com.planazo.minijuego.domain.port.in.FinalizarPartidaUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -49,15 +45,6 @@ public class SalaRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(SalaRuntime.class);
     private static final long PERIODO_TICK_MS = 50; // 20 ticks/segundo, ver RT-3
-    /**
-     * Las serpientes no avanzan solas: cada tecla encolada mueve una celda.
-     * Cada jugador puede dar como máximo un paso cada 2 ticks (100 ms, 10
-     * celdas/seg) — si mantiene la tecla presionada, la repetición del
-     * teclado no lo lanza a 30 celdas/seg contra la pared.
-     */
-    private static final int TICKS_POR_PASO = 2;
-    /** Teclas guardadas por jugador entre pasos: permite "arriba + izquierda" rápido sin acumular retraso. */
-    private static final int MAX_PASOS_PENDIENTES = 2;
 
     private final Sala sala;
     private final ReentrantLock lock = new ReentrantLock();
@@ -70,10 +57,9 @@ public class SalaRuntime {
 
     // Solo se tocan con el lock tomado.
     private ScheduledFuture<?> tickFuture;
-    private int ticksDesdeUltimoPaso;
+    private long ultimoPasoDifundido = -1;
     private long ultimoSegundoCuentaDifundido = -1;
     private long ultimoSegundoRelojDifundido = -1;
-    private final Map<String, Deque<Direccion>> pasosPendientes = new HashMap<>();
 
     public SalaRuntime(Sala sala,
                         ScheduledExecutorService scheduler,
@@ -185,6 +171,20 @@ public class SalaRuntime {
         }
     }
 
+    /** Los jugadores de la sala si todavía no está en partida; vacía si está jugando o no hay nadie. */
+    public List<String> jugadoresSiNoEstaEnPartida() {
+        lock.lock();
+        try {
+            EstadoSala estado = sala.estado();
+            if (estado != EstadoSala.ESPERANDO_JUGADORES && estado != EstadoSala.CUENTA_REGRESIVA) {
+                return List.of();
+            }
+            return sala.serpientes().stream().map(s -> s.jugadorId()).toList();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public boolean tieneJugador(String jugadorId) {
         lock.lock();
         try {
@@ -214,11 +214,10 @@ public class SalaRuntime {
         if (tickFuture != null && !tickFuture.isDone()) {
             return;
         }
-        ticksDesdeUltimoPaso = 0;
+        ultimoPasoDifundido = -1;
         ultimoSegundoCuentaDifundido = -1;
         ultimoSegundoRelojDifundido = -1;
         colaMovimientos.clear();
-        pasosPendientes.clear();
         tickFuture = scheduler.scheduleAtFixedRate(this::ejecutarTickSeguro, PERIODO_TICK_MS, PERIODO_TICK_MS, TimeUnit.MILLISECONDS);
     }
 
@@ -251,7 +250,6 @@ public class SalaRuntime {
                     colaMovimientos.clear(); // las teclas de antes del arranque no cuentan
                     sala.tick();
                     if (sala.estado() == EstadoSala.EN_CURSO) {
-                        ticksDesdeUltimoPaso = 0;
                         difundir = true;
                         arrancoLaPartida = true;
                     } else if (sala.segundosCuentaRegresiva() != ultimoSegundoCuentaDifundido) {
@@ -260,14 +258,12 @@ public class SalaRuntime {
                     }
                 }
                 case EN_CURSO -> {
-                    boolean terminada = false;
-                    if (++ticksDesdeUltimoPaso >= TICKS_POR_PASO) {
-                        ticksDesdeUltimoPaso = 0;
-                        boolean huboPasos = darUnPasoPorJugador();
-                        terminada = sala.estado() == EstadoSala.FINALIZADA;
-                        difundir = huboPasos;
+                    aplicarGiros();
+                    boolean terminada = sala.tick(); // paso de las serpientes, reloj y desconexiones
+                    if (sala.pasosDados() != ultimoPasoDifundido) {
+                        ultimoPasoDifundido = sala.pasosDados();
+                        difundir = true;
                     }
-                    terminada = terminada || sala.tick(); // reloj de la partida y desconexiones
                     if (sala.tiempoRestanteSegundos() != ultimoSegundoRelojDifundido) {
                         ultimoSegundoRelojDifundido = sala.tiempoRestanteSegundos();
                         difundir = true;
@@ -294,34 +290,19 @@ public class SalaRuntime {
     }
 
     /**
-     * Pasa las teclas recibidas a la fila de cada jugador y aplica a lo sumo
-     * un paso por jugador. Requiere el lock.
-     *
-     * @return true si alguna serpiente se movió (o murió al moverse).
+     * Pasa a la sala los giros que llegaron desde el último tick. Las
+     * serpientes avanzan solas dentro de {@link Sala#tick()}; un giro solo
+     * cambia hacia dónde irá el próximo paso. Requiere el lock.
      */
-    private boolean darUnPasoPorJugador() {
+    private void aplicarGiros() {
         ComandoMovimiento comando;
         while ((comando = colaMovimientos.poll()) != null) {
-            Deque<Direccion> fila = pasosPendientes.computeIfAbsent(comando.jugadorId(), k -> new ArrayDeque<>());
-            if (fila.size() < MAX_PASOS_PENDIENTES) {
-                fila.addLast(comando.direccion());
-            }
-        }
-        boolean huboPasos = false;
-        for (Map.Entry<String, Deque<Direccion>> entrada : pasosPendientes.entrySet()) {
-            Direccion direccion = entrada.getValue().pollFirst();
-            if (direccion == null || sala.estado() != EstadoSala.EN_CURSO) {
-                continue;
-            }
             try {
-                sala.moverJugador(entrada.getKey(), direccion);
-                huboPasos = true;
+                sala.moverJugador(comando.jugadorId(), comando.direccion());
             } catch (DomainException ex) {
-                log.debug("Movimiento descartado en sala {}: {}", sala.id(), ex.getMessage());
+                log.debug("Giro descartado en sala {}: {}", sala.id(), ex.getMessage());
             }
         }
-        pasosPendientes.values().removeIf(Deque::isEmpty);
-        return huboPasos;
     }
 
     /**

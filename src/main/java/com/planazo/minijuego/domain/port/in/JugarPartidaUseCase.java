@@ -1,5 +1,8 @@
 package com.planazo.minijuego.domain.port.in;
 
+import java.util.List;
+import java.util.Map;
+
 import com.planazo.minijuego.domain.model.Direccion;
 
 /**
@@ -16,4 +19,10 @@ public interface JugarPartidaUseCase {
     void manejarDesconexion(String salaId, String jugadorId);
 
     void manejarReconexion(String salaId, String jugadorId);
+
+    /** Quiénes están en salas que aún no arrancan: salaId → jugadorIds. */
+    Map<String, List<String>> jugadoresEnSalaDeEspera();
+
+    /** Saca de la sala a un jugador que se fue sin avisar (sin conexión de juego). */
+    void retirarJugadorInactivo(String salaId, String jugadorId);
 }

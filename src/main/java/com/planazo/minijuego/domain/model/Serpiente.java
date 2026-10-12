@@ -8,8 +8,9 @@ import java.util.UUID;
 /**
  * Estado mutable de un jugador dentro de una {@link Sala}.
  *
- * <p>La serpiente no avanza sola: cada comando de movimiento del jugador
- * la mueve exactamente una celda (ver {@link Sala#moverJugador}). Nace con
+ * <p>Snake clásico: la serpiente avanza sola una celda en cada paso de la
+ * partida (ver {@link Sala#tick()}); el jugador solo elige hacia dónde gira
+ * ({@link #girarHacia}). Nace con
  * {@link #LONGITUD_INICIAL} segmentos para que su cuerpo sea un obstáculo
  * real contra el que los demás pueden chocar.
  *
@@ -25,11 +26,14 @@ import java.util.UUID;
 public class Serpiente {
 
     public static final int LONGITUD_INICIAL = 4;
+    /** Giros que se recuerdan entre pasos: "arriba + izquierda" rápido entra en dos pasos seguidos. */
+    public static final int MAX_GIROS_PENDIENTES = 2;
 
     private final String jugadorId;
     private final String jugadorNombre;
     private final Deque<Posicion> cuerpo = new ArrayDeque<>();
     private Direccion direccion;
+    private final Deque<Direccion> girosPendientes = new ArrayDeque<>();
     private EstadoSerpiente estado;
     private int puntaje;
     private long ultimoCambioEstado;
@@ -56,6 +60,7 @@ public class Serpiente {
             segmento = new Posicion(segmento.x() - direccionInicial.deltaX(), segmento.y() - direccionInicial.deltaY());
         }
         this.direccion = direccionInicial;
+        this.girosPendientes.clear();
         this.estado = EstadoSerpiente.VIVA;
         this.puntaje = 0;
         this.ultimoCambioEstado = System.currentTimeMillis();
@@ -68,6 +73,36 @@ public class Serpiente {
      */
     public boolean puedeMoverseHacia(Direccion nueva) {
         return nueva != null && !(cuerpo.size() > 1 && nueva.esOpuesta(direccion));
+    }
+
+    /**
+     * El jugador pide girar. El giro se aplica en el próximo paso; se valida
+     * contra el último giro pendiente (o la dirección actual), así que dar
+     * media vuelta sobre el cuello o repetir la misma dirección se ignora.
+     *
+     * @return true si el giro quedó en cola.
+     */
+    public boolean girarHacia(Direccion nueva) {
+        if (nueva == null || girosPendientes.size() >= MAX_GIROS_PENDIENTES) {
+            return false;
+        }
+        Direccion referencia = girosPendientes.isEmpty() ? direccion : girosPendientes.peekLast();
+        if (nueva == referencia || (cuerpo.size() > 1 && nueva.esOpuesta(referencia))) {
+            return false;
+        }
+        girosPendientes.addLast(nueva);
+        return true;
+    }
+
+    /** Dirección del próximo paso: el siguiente giro pendiente, o seguir derecho. No muta nada. */
+    Direccion proximaDireccion() {
+        Direccion giro = girosPendientes.peekFirst();
+        return giro != null ? giro : direccion;
+    }
+
+    /** Consume el giro que se acaba de usar en este paso. */
+    void consumirGiro() {
+        girosPendientes.pollFirst();
     }
 
     /** La celda a la que llegaría la cabeza moviéndose una vez hacia {@code hacia}, sin mutar nada todavía. */

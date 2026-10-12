@@ -4,6 +4,7 @@ import com.planazo.minijuego.domain.model.Direccion;
 import com.planazo.minijuego.domain.model.ResumenSala;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Lo que la capa de aplicación necesita del estado de juego "en vivo": las
@@ -37,4 +38,7 @@ public interface GestorDeSalasEnVivoPort {
     void marcarDesconectado(String salaId, String jugadorId);
 
     void marcarReconectado(String salaId, String jugadorId);
+
+    /** Jugadores de cada sala que todavía no está en partida (espera o cuenta regresiva): salaId → jugadorIds. */
+    Map<String, List<String>> jugadoresEnEspera();
 }

@@ -9,3 +9,10 @@ logging:
   level:
     com.planazo.minijuego: DEBUG
     org.springframework.web.socket: DEBUG
+
+planazo:
+  seguridad:
+    dev-token:
+      habilitado: true
+  cors:
+    origenes: "*"

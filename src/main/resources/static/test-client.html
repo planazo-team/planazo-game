@@ -62,8 +62,8 @@
         </div>
         <canvas id="tablero" width="480" height="360"></canvas>
         <div class="ayuda" style="margin-top:8px">
-          Cada tecla (<kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> o <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>) mueve tu serpiente una celda;
-          mantenla presionada para avanzar seguido. Si no tocas nada, tu serpiente se queda quieta.
+          Tu serpiente avanza sola; las teclas (<kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> o <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>) solo la hacen girar.
+          No puede dar media vuelta sobre su cuello.
           Solo la ventana con el foco recibe las teclas. La partida empieza sola cuando la sala está <b>llena</b>.
           Si tu cabeza toca un borde o cualquier cuerpo, mueres; gana la última serpiente en pie.
         </div>
@@ -224,7 +224,7 @@ document.addEventListener('keydown', (e) => {
   const direccion = TECLAS[e.key];
   if (!direccion || !conectado() || !salaActualId) return;
   e.preventDefault();
-  // Cada pulsación (y cada repetición al mantenerla) es un paso; el servidor limita a 10 pasos/seg.
+  // Cada pulsación es un giro; la serpiente avanza sola en el servidor (un paso cada 150 ms).
   if (ultimoEstado && ultimoEstado.estado === 'EN_CURSO') {
     stomp.send(`/app/salas/${salaActualId}/mover`, {}, JSON.stringify({ direccion }));
   }

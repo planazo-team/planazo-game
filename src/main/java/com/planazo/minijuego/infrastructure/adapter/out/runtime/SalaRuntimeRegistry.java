@@ -143,6 +143,18 @@ public class SalaRuntimeRegistry implements GestorDeSalasEnVivoPort {
         runtimeOLanzar(salaId).marcarReconectado(jugadorId);
     }
 
+    @Override
+    public Map<String, List<String>> jugadoresEnEspera() {
+        Map<String, List<String>> enEspera = new java.util.HashMap<>();
+        runtimesPorSalaId.forEach((salaId, runtime) -> {
+            List<String> jugadores = runtime.jugadoresSiNoEstaEnPartida();
+            if (!jugadores.isEmpty()) {
+                enEspera.put(salaId, jugadores);
+            }
+        });
+        return enEspera;
+    }
+
     private SalaRuntime runtimeOLanzar(String salaId) {
         SalaRuntime runtime = runtimesPorSalaId.get(salaId);
         if (runtime == null) {

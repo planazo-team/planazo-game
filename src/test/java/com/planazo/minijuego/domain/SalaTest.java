@@ -37,6 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  *
  * <p>Puntos de aparición usados abajo: j1 nace en (4,2) mirando a la
  * DERECHA con el cuerpo en x 1..4; j2 en (19,15) mirando a la IZQUIERDA.
+ * Snake clásico: las serpientes avanzan solas cada
+ * {@link Sala#MILISEGUNDOS_POR_PASO} ms del reloj mutable.
  */
 class SalaTest {
 
@@ -118,26 +120,68 @@ class SalaTest {
     }
 
     @Test
-    void lasSerpientesNoSeMuevenSolas() { // SNK-04
+    void antesDelPrimerPaso_nadieSeMueve_yLuegoAvanzanSolas() { // SNK-04, Snake clásico
         Sala sala = partidaDeDos();
         var cuerpoAntes = buscar(sala, "j1").cuerpoInmutable();
 
-        for (int i = 0; i < 50; i++) {
-            sala.tick();
-        }
-
+        sala.tick(); // aún dentro del respiro inicial
         assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpoAntes);
+
+        primerPaso(sala);
+
+        // startsWith y no containsExactly: si la comida cayó justo ahí, la serpiente creció.
+        assertThat(buscar(sala, "j1").cuerpoInmutable()).startsWith(
+                new Posicion(5, 2), new Posicion(4, 2), new Posicion(3, 2), new Posicion(2, 2));
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(18, 15));
     }
 
     @Test
-    void cadaMovimiento_avanzaUnaCelda_yElCuerpoLaSigue() { // SNK-04
+    void sinTocarNada_avanzaUnaCeldaPorPaso() {
+        Sala sala = partidaDeDos();
+        primerPaso(sala);
+        paso(sala);
+        paso(sala);
+
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(7, 2));
+        assertThat(sala.pasosDados()).isEqualTo(3);
+    }
+
+    @Test
+    void unTickAntesDeTiempo_noDaPaso() {
+        Sala sala = partidaDeDos();
+        primerPaso(sala);
+        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_POR_PASO - 10));
+        sala.tick();
+
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2));
+    }
+
+    @Test
+    void girar_cambiaLaDireccionEnElProximoPaso() { // SNK-04
         Sala sala = partidaDeDos();
 
         sala.moverJugador("j1", Direccion.ABAJO);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2)); // girar no mueve
 
+        primerPaso(sala);
         Serpiente j1 = buscar(sala, "j1");
-        assertThat(j1.cuerpoInmutable()).containsExactly(
+        assertThat(j1.cuerpoInmutable()).startsWith(
                 new Posicion(4, 3), new Posicion(4, 2), new Posicion(3, 2), new Posicion(2, 2));
+        paso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 4)); // sigue hacia abajo
+    }
+
+    @Test
+    void dosGirosRapidos_seAplicanEnPasosSeguidos() {
+        Sala sala = partidaDeDos();
+
+        sala.moverJugador("j1", Direccion.ABAJO);
+        sala.moverJugador("j1", Direccion.IZQUIERDA); // válido después de ABAJO
+
+        primerPaso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 3));
+        paso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(3, 3));
     }
 
     @Test
@@ -145,31 +189,47 @@ class SalaTest {
         Sala sala = partidaDeDos();
 
         sala.moverJugador("j1", Direccion.IZQUIERDA); // j1 mira a la derecha
+        primerPaso(sala);
 
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2));
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2)); // siguió derecho
         assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.VIVA);
     }
 
     @Test
     void cabezaContraElCuerpoDeOtra_muere_yGanaLaUltimaEnPie() { // SNK-08 + SNK-09/10
         Sala sala = partidaDeDos();
-        // j2 sube por la columna 3 hasta chocar con el cuerpo de j1 en (3,2).
-        // Recorrido: (19,15) -> izquierda hasta x=3 -> arriba hasta y=3 -> arriba choca.
-        for (int i = 0; i < 16; i++) {
-            sala.moverJugador("j2", Direccion.IZQUIERDA);
-        }
-        for (int i = 0; i < 12; i++) {
-            sala.moverJugador("j2", Direccion.ARRIBA);
-        }
-        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(3, 3));
+        // j1 baja por la columna 4; j2 viene por la fila 15 hacia la izquierda y
+        // su cabeza llega a (4,15) cuando esa celda ya es cuerpo de j1.
+        sala.moverJugador("j1", Direccion.ABAJO);
 
-        boolean terminada = sala.moverJugador("j2", Direccion.ARRIBA);
+        boolean terminada = primerPaso(sala);
+        for (int i = 0; i < 20 && !terminada; i++) {
+            terminada = paso(sala);
+        }
 
         assertThat(terminada).isTrue();
         assertThat(buscar(sala, "j2").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
         ResultadoPartida resultado = sala.construirResultado();
         assertThat(resultado.motivoVictoria()).isEqualTo(MotivoVictoria.ULTIMO_EN_PIE);
         assertThat(resultado.ganadorJugadorId()).isEqualTo("j1");
+    }
+
+    @Test
+    void dosCabezasEnLaMismaCelda_muerenLasDos() {
+        Sala sala = partidaDeDos();
+        // j1 da un paso a la derecha y baja por la columna 5; j2 va por la fila 15
+        // hacia la izquierda: en el paso 14 las dos cabezas llegan a (5,15).
+        primerPaso(sala);
+        sala.moverJugador("j1", Direccion.ABAJO);
+        boolean terminada = false;
+        for (int i = 0; i < 20 && !terminada; i++) {
+            terminada = paso(sala);
+        }
+
+        assertThat(terminada).isTrue();
+        assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
+        assertThat(buscar(sala, "j2").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
+        assertThat(sala.construirResultado().motivoVictoria()).isEqualTo(MotivoVictoria.EMPATE_TODOS_ELIMINADOS);
     }
 
     @Test
@@ -180,9 +240,10 @@ class SalaTest {
         sala.unirse("j3", "Camila");
         arrancar(sala);
 
-        sala.moverJugador("j1", Direccion.ARRIBA); // (4,1)
-        sala.moverJugador("j1", Direccion.ARRIBA); // (4,0)
-        sala.moverJugador("j1", Direccion.ARRIBA); // borde
+        sala.moverJugador("j1", Direccion.ARRIBA);
+        primerPaso(sala); // (4,1)
+        paso(sala);       // (4,0)
+        paso(sala);       // borde
 
         assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
         assertThat(sala.estado()).isEqualTo(EstadoSala.EN_CURSO); // j2 y j3 siguen vivos
@@ -193,13 +254,27 @@ class SalaTest {
         Sala sala = partidaDeDos();
 
         sala.moverJugador("j1", Direccion.ARRIBA);
-        sala.moverJugador("j1", Direccion.ARRIBA);
-        boolean terminada = sala.moverJugador("j1", Direccion.ARRIBA);
+        primerPaso(sala);
+        paso(sala);
+        boolean terminada = paso(sala);
 
         assertThat(terminada).isTrue();
         ResultadoPartida resultado = sala.construirResultado();
         assertThat(resultado.ganadorJugadorId()).isEqualTo("j2");
         assertThat(resultado.puntajes().get(0).jugadorId()).isEqualTo("j2");
+    }
+
+    @Test
+    void unaSerpienteCongelada_noAvanza_peroSigueSiendoObstaculo() { // SNK-07
+        Sala sala = partidaDeDos();
+        sala.marcarDesconectado("j1");
+        var cuerpo = buscar(sala, "j1").cuerpoInmutable();
+
+        primerPaso(sala);
+        paso(sala);
+
+        assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpo);
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(17, 15)); // la otra sí avanza
     }
 
     @Test
@@ -262,6 +337,7 @@ class SalaTest {
         sala.unirse("j3", "Camila");
         arrancar(sala);
         sala.moverJugador("j1", Direccion.ABAJO);
+        primerPaso(sala);
         sala.marcarDesconectado("j3");
         sala.salir("j2"); // j1 viva + j3 congelada (cuenta como viva) -> sigue
         reloj.avanzar(Duration.ofSeconds(Sala.SEGUNDOS_LIMITE_PARTIDA + 1));
@@ -304,6 +380,18 @@ class SalaTest {
         reloj.avanzar(Duration.ofSeconds(Sala.SEGUNDOS_CUENTA_REGRESIVA));
         sala.tick();
         assertThat(sala.estado()).isEqualTo(EstadoSala.EN_CURSO);
+    }
+
+    /** Termina el respiro inicial y da el primer paso. */
+    private boolean primerPaso(Sala sala) {
+        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_ANTES_DEL_PRIMER_PASO));
+        return sala.tick();
+    }
+
+    /** Avanza el reloj lo justo para un paso más. */
+    private boolean paso(Sala sala) {
+        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_POR_PASO));
+        return sala.tick();
     }
 
     private static Serpiente buscar(Sala sala, String jugadorId) {

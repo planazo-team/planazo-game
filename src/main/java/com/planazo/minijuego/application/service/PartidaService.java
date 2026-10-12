@@ -5,6 +5,9 @@ import com.planazo.minijuego.domain.port.in.JugarPartidaUseCase;
 import com.planazo.minijuego.domain.port.out.GestorDeSalasEnVivoPort;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Map;
+
 /** SNK-04, SNK-07. El cierre de partida vive en {@link FinalizarPartidaService}. */
 @Service
 public class PartidaService implements JugarPartidaUseCase {
@@ -28,5 +31,15 @@ public class PartidaService implements JugarPartidaUseCase {
     @Override
     public void manejarReconexion(String salaId, String jugadorId) {
         salasEnVivo.marcarReconectado(salaId, jugadorId);
+    }
+
+    @Override
+    public Map<String, List<String>> jugadoresEnSalaDeEspera() {
+        return salasEnVivo.jugadoresEnEspera();
+    }
+
+    @Override
+    public void retirarJugadorInactivo(String salaId, String jugadorId) {
+        salasEnVivo.salir(salaId, jugadorId);
     }
 }

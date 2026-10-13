@@ -107,6 +107,11 @@ public class SalaRuntime {
         ResultadoPartida resultado = null;
         lock.lock();
         try {
+            // Tolerante: tras el fin de una partida la sala ya se vació y el
+            // navegador puede pedir salir igual (al cerrar la pestaña).
+            if (!sala.tieneJugador(jugadorId)) {
+                return;
+            }
             boolean seguiaEnCurso = sala.estado() == EstadoSala.EN_CURSO;
             sala.salir(jugadorId);
             if (seguiaEnCurso && sala.estado() == EstadoSala.FINALIZADA) {
@@ -310,8 +315,8 @@ public class SalaRuntime {
      * sin importar si lo detectó un tick normal o un jugador saliéndose
      * a mitad de partida (SNK-06): difundir el resultado final (SNK-10),
      * persistirlo y actualizar el leaderboard
-     * ({@link FinalizarPartidaUseCase}, CC-2), y dejar la sala lista para
-     * la revancha con los mismos jugadores.
+     * ({@link FinalizarPartidaUseCase}, CC-2), y vaciar la sala: la
+     * partida terminó para todos y no arranca otra sola.
      */
     private void finalizarYReiniciar(ResultadoPartida resultado) {
         difundirEstado(resultado);
@@ -323,7 +328,7 @@ public class SalaRuntime {
         }
         lock.lock();
         try {
-            sala.reiniciarParaNuevaPartida();
+            sala.cerrarPartida();
             sincronizarLoop();
         } finally {
             lock.unlock();

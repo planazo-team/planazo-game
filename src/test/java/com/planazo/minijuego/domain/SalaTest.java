@@ -330,36 +330,34 @@ class SalaTest {
     }
 
     @Test
-    void reiniciarParaNuevaPartida_conservaALosConectados_yLiberaLosDesconectados() { // SNK-11
-        Sala sala = nuevaSala(3);
-        sala.unirse("j1", "Ana");
-        sala.unirse("j2", "Beto");
-        sala.unirse("j3", "Camila");
-        arrancar(sala);
-        sala.moverJugador("j1", Direccion.ABAJO);
-        primerPaso(sala);
-        sala.marcarDesconectado("j3");
-        sala.salir("j2"); // j1 viva + j3 congelada (cuenta como viva) -> sigue
+    void cerrarPartida_vaciaLaSala_yNoArrancaUnaRevanchaSola() {
+        Sala sala = partidaDeDos();
         reloj.avanzar(Duration.ofSeconds(Sala.SEGUNDOS_LIMITE_PARTIDA + 1));
         assertThat(sala.tick()).isTrue();
 
-        sala.reiniciarParaNuevaPartida();
+        sala.cerrarPartida();
 
-        assertThat(sala.estado()).isEqualTo(EstadoSala.ESPERANDO_JUGADORES); // ya no está llena
-        assertThat(sala.tieneJugador("j3")).isFalse(); // desconectada: libera su cupo
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2)); // de vuelta en su spawn
+        assertThat(sala.estado()).isEqualTo(EstadoSala.ESPERANDO_JUGADORES);
+        assertThat(sala.cantidadJugadores()).isZero();
+        assertThat(sala.tieneJugador("j1")).isFalse();
+        // Pase el tiempo que pase, no empieza otra partida por su cuenta.
+        reloj.avanzar(Duration.ofSeconds(60));
+        assertThat(sala.tick()).isFalse();
+        assertThat(sala.estado()).isEqualTo(EstadoSala.ESPERANDO_JUGADORES);
     }
 
     @Test
-    void reiniciarParaNuevaPartida_conLaSalaLlena_programaLaRevancha() {
+    void cerrarPartida_losMismosJugadoresPuedenVolverAEntrar() {
         Sala sala = partidaDeDos();
         reloj.avanzar(Duration.ofSeconds(Sala.SEGUNDOS_LIMITE_PARTIDA + 1));
         sala.tick();
+        sala.cerrarPartida();
 
-        sala.reiniciarParaNuevaPartida();
+        sala.unirse("j1", "Ana");
+        sala.unirse("j2", "Beto");
 
         assertThat(sala.estado()).isEqualTo(EstadoSala.CUENTA_REGRESIVA);
-        assertThat(sala.segundosCuentaRegresiva()).isEqualTo(Sala.SEGUNDOS_ANTES_DE_REVANCHA);
+        assertThat(sala.segundosCuentaRegresiva()).isEqualTo(Sala.SEGUNDOS_CUENTA_REGRESIVA);
     }
 
     private Sala nuevaSala(int capacidad) {

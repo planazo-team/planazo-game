@@ -18,6 +18,8 @@ public record JugadorEnSalaDTO(
         String direccion,
         String estado,
         int puntaje,
-        boolean conectado
+        boolean conectado,
+        /** Salió de la pantalla: su serpiente está quieta esperándolo. */
+        boolean pausado
 ) {
 }

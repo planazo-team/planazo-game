@@ -31,6 +31,10 @@ import java.util.concurrent.ThreadLocalRandom;
  *       {@link #MILISEGUNDOS_POR_PASO} ms ({@link #tick()}); el jugador solo
  *       gira ({@link #moverJugador}). Las congeladas por desconexión no se
  *       mueven, pero siguen siendo obstáculo.</li>
+ *   <li>Si el jugador sale de la pantalla (otra pestaña u otra app), su
+ *       serpiente se pausa: queda quieta donde iba, como obstáculo, y al volver
+ *       sigue desde ahí ({@link #pausarJugador}, {@link #reanudarJugador}). La
+ *       partida no se detiene para los demás.</li>
  *   <li>En cada paso todas avanzan a la vez: si dos cabezas llegan a la misma
  *       celda, mueren las dos.</li>
  *   <li>Si la cabeza de una serpiente toca un borde o cualquier cuerpo
@@ -52,6 +56,8 @@ public class Sala {
     public static final int ANCHO_TABLERO = 24;
     public static final int ALTO_TABLERO = 18;
     public static final int SEGUNDOS_CONGELACION_DESCONEXION = 15;
+    /** Lo más que una serpiente puede quedarse en pausa (el jugador salió de la pantalla) antes de ser eliminada. */
+    public static final int SEGUNDOS_MAXIMOS_PAUSA = 60;
     public static final int SEGUNDOS_LIMITE_PARTIDA = 180;
     public static final int SEGUNDOS_CUENTA_REGRESIVA = 3;
     /** Cada cuánto avanzan todas las serpientes una celda (~6,7 celdas por segundo). */
@@ -183,6 +189,20 @@ public class Sala {
         obtenerOLanzar(jugadorId).reconectar();
     }
 
+    /**
+     * El jugador dejó la pantalla: su serpiente se queda quieta donde está
+     * hasta que vuelva, máximo {@link #SEGUNDOS_MAXIMOS_PAUSA} segundos. Vale
+     * también en la sala de espera: si la partida arranca sin él, nace quieta.
+     */
+    public void pausarJugador(String jugadorId) {
+        obtenerOLanzar(jugadorId).pausar();
+    }
+
+    /** El jugador volvió a la pantalla: su serpiente sigue exactamente donde iba. */
+    public void reanudarJugador(String jugadorId) {
+        obtenerOLanzar(jugadorId).reanudar();
+    }
+
     // ---------------------------------------------------------------
     // SNK-04 / SNK-08: mover, comer, chocar
     // ---------------------------------------------------------------
@@ -217,7 +237,13 @@ public class Sala {
      */
     private boolean avanzarSerpientes() {
         pasosDados++;
-        List<Serpiente> moviles = serpientes.values().stream().filter(Serpiente::esControlablePorJugador).toList();
+        List<Serpiente> moviles = new ArrayList<>();
+        for (Serpiente serpiente : serpientes.values()) {
+            // Recién vuelta de una pausa: se queda quieta unos pasos (y su cola no se libera).
+            if (serpiente.esControlablePorJugador() && !serpiente.tomarRespiro()) {
+                moviles.add(serpiente);
+            }
+        }
         Map<Serpiente, Direccion> direcciones = new HashMap<>();
         Map<Serpiente, Posicion> cabezas = new HashMap<>();
         Serpiente comedora = null;
@@ -322,7 +348,8 @@ public class Sala {
 
     private void eliminarCongelacionesExpiradas() {
         for (Serpiente serpiente : serpientes.values()) {
-            if (serpiente.segundosCongeladaSuperan(SEGUNDOS_CONGELACION_DESCONEXION)) {
+            int limite = serpiente.estaPausada() ? SEGUNDOS_MAXIMOS_PAUSA : SEGUNDOS_CONGELACION_DESCONEXION;
+            if (serpiente.segundosCongeladaSuperan(limite)) {
                 serpiente.eliminar();
             }
         }

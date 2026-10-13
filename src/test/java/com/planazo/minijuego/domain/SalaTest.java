@@ -318,6 +318,59 @@ class SalaTest {
     }
 
     @Test
+    void pausar_dejaLaSerpienteQuieta_yAlReanudarSigueDondeIba() {
+        Sala sala = partidaDeDos();
+        primerPaso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2));
+
+        sala.pausarJugador("j1");
+        paso(sala);
+        paso(sala);
+
+        Serpiente j1 = buscar(sala, "j1");
+        assertThat(j1.estaPausada()).isTrue();
+        assertThat(j1.estaViva()).isTrue(); // sigue en el tablero como obstáculo
+        assertThat(j1.cabeza()).isEqualTo(new Posicion(5, 2));
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(16, 15)); // la partida sigue para los demás
+
+        sala.reanudarJugador("j1");
+        assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.VIVA);
+        for (int i = 0; i < Serpiente.PASOS_DE_RESPIRO_AL_VOLVER; i++) {
+            paso(sala); // respiro para ubicarse: todavía no se mueve
+        }
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2));
+
+        paso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(6, 2)); // retoma en la misma dirección
+    }
+
+    @Test
+    void enPausa_reconectarElSocket_noLaDescongela_hastaReanudar() {
+        Sala sala = partidaDeDos();
+        sala.pausarJugador("j1");
+        sala.marcarDesconectado("j1"); // el celular cerró el socket en segundo plano
+
+        sala.reconectar("j1");
+        assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.DESCONECTADA_CONGELADA);
+
+        sala.reanudarJugador("j1");
+        assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.VIVA);
+    }
+
+    @Test
+    void pausarEnLaSalaDeEspera_laPartidaArrancaConLaSerpienteQuieta() {
+        Sala sala = nuevaSala(2);
+        sala.unirse("j1", "Ana");
+        sala.pausarJugador("j1");
+        sala.unirse("j2", "Beto");
+        arrancar(sala);
+
+        assertThat(buscar(sala, "j1").esControlablePorJugador()).isFalse();
+        primerPaso(sala);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2));
+    }
+
+    @Test
     void marcarDesconectado_enSalaDeEspera_liberaElCupo() {
         Sala sala = nuevaSala(3);
         sala.unirse("j1", "Ana");

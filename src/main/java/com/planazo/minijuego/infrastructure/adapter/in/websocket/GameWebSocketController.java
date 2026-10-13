@@ -66,6 +66,21 @@ public class GameWebSocketController {
         }
     }
 
+    /**
+     * El jugador cambió de pestaña o de app: el cliente lo avisa con el
+     * evento {@code visibilitychange} y su serpiente se queda quieta.
+     */
+    @MessageMapping("/salas/{salaId}/pausar")
+    public void pausar(@DestinationVariable String salaId, Principal principal) {
+        jugarPartidaUseCase.pausarSerpiente(salaId, principal.getName());
+    }
+
+    /** Volvió a la pantalla: su serpiente sigue donde iba. */
+    @MessageMapping("/salas/{salaId}/reanudar")
+    public void reanudar(@DestinationVariable String salaId, Principal principal) {
+        jugarPartidaUseCase.reanudarSerpiente(salaId, principal.getName());
+    }
+
     /** Devuelve el error solo a quien lo causó — nunca se difunde un error de un jugador a toda la sala. */
     @MessageMapping("/salas/{salaId}/ping")
     @SendToUser("/queue/pong")

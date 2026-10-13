@@ -20,7 +20,9 @@ public record ResumenSala(
         int capacidad,
         int cantidadJugadores,
         String estado,
-        List<String> nombresJugadores
+        List<String> nombresJugadores,
+        /** Mismo orden que {@code nombresJugadores}: le deja al cliente saber si ya está en la sala y volver a ella. */
+        List<String> idsJugadores
 ) {
     public boolean tieneCupoDisponible() {
         return cantidadJugadores < capacidad;

@@ -201,8 +201,9 @@ public class SalaRuntime {
 
     private ResumenSala resumenSinLock() {
         List<String> nombres = sala.serpientes().stream().map(s -> s.jugadorNombre()).toList();
+        List<String> ids = sala.serpientes().stream().map(s -> s.jugadorId()).toList();
         return new ResumenSala(sala.id(), sala.codigo(), sala.capacidad(), sala.cantidadJugadores(),
-                sala.estado().name(), nombres);
+                sala.estado().name(), nombres, ids);
     }
 
     /** El loop solo corre mientras hay algo que avanzar: la cuenta regresiva o la partida. Requiere el lock. */

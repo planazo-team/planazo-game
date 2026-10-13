@@ -54,8 +54,6 @@ public class Sala {
     public static final int SEGUNDOS_CONGELACION_DESCONEXION = 15;
     public static final int SEGUNDOS_LIMITE_PARTIDA = 180;
     public static final int SEGUNDOS_CUENTA_REGRESIVA = 3;
-    /** Tras una partida, tiempo para ver el resultado antes de que arranque la revancha. */
-    public static final int SEGUNDOS_ANTES_DE_REVANCHA = 8;
     /** Cada cuánto avanzan todas las serpientes una celda (~6,7 celdas por segundo). */
     public static final int MILISEGUNDOS_POR_PASO = 150;
     /** Respiro al arrancar antes del primer paso, para ubicarse en el tablero. */
@@ -348,21 +346,18 @@ public class Sala {
     }
 
     /**
-     * SNK-11 (implícita): tras una partida, la sala vuelve a la espera con
-     * los mismos jugadores — salvo los que se desconectaron, que liberan su
-     * cupo. Si sigue llena, la revancha arranca sola tras
-     * {@link #SEGUNDOS_ANTES_DE_REVANCHA} segundos (tiempo para ver el
-     * resultado).
+     * Tras una partida la sala se vacía y vuelve a la espera: no hay
+     * revancha automática. Cada partida tiene un solo resultado (y, si hay
+     * bonos de ganadores, un solo podio); quien quiera seguir jugando entra
+     * otra vez a una sala, como cualquiera.
      */
-    public void reiniciarParaNuevaPartida() {
-        serpientes.values().removeIf(s -> !s.estaConectado());
-        reubicarEnPuntosDeAparicion();
+    public void cerrarPartida() {
+        serpientes.clear();
         comida = null;
         iniciadaEn = null;
         proximoPaso = null;
         cuentaRegresivaTerminaEn = null;
         this.estado = EstadoSala.ESPERANDO_JUGADORES;
-        evaluarCuentaRegresiva(SEGUNDOS_ANTES_DE_REVANCHA);
     }
 
     // ---------------------------------------------------------------

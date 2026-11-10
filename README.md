@@ -1,5 +1,7 @@
 # planazo-game (minijuego-service)
 
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=planazo-team_planazo-game&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=planazo-team_planazo-game) [![Cobertura](https://sonarcloud.io/api/project_badges/measure?project=planazo-team_planazo-game&metric=coverage)](https://sonarcloud.io/component_measures?id=planazo-team_planazo-game&metric=coverage)
+
 Microservicio de la épica **Minijuego** de Planazo, dueño: Diego Rozo. Está **en producción en Railway** (`https://planazo-game-production.up.railway.app`) e integrado en el frontend: la pestaña *Juego* de https://planazo-frontend.vercel.app es el cliente de este servicio (`test-client.html`) con el mismo diseño. Ver [Integración con Planazo](#integración-con-planazo).
 
 Microservicio de la épica **Minijuego** de Planazo:

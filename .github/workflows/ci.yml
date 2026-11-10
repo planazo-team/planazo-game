@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historial completo: SonarCloud lo usa para detectar el código nuevo y el blame
+          fetch-depth: 0
 
       - name: Configurar JDK 21
         uses: actions/setup-java@v4
@@ -19,5 +22,35 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: mvn verify (incluye ArchitectureRulesTest y SalaTest)
+      - name: mvn verify (pruebas + cobertura JaCoCo)
         run: mvn -B verify
+
+      # ESC-05: el análisis solo corre si existe el secreto SONAR_TOKEN, para no
+      # bloquear PRs mientras se crea la organización en SonarCloud (ni los de Dependabot,
+      # que no reciben secretos de Actions).
+      - name: ¿Está configurado SonarCloud?
+        id: sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SonarCloud::Falta el secreto SONAR_TOKEN; se omite el análisis estático."
+          fi
+
+      - name: Cache de SonarCloud
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      # Reutiliza target/ del paso anterior (clases compiladas + jacoco.xml): no repite las pruebas.
+      - name: Análisis estático (SonarCloud)
+        if: steps.sonar.outputs.enabled == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar

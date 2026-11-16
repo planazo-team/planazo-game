@@ -9,6 +9,11 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # El contexto `secrets` no se puede usar dentro de un `if:` (restricción
+    # de GitHub Actions, no un typo); por eso se refleja primero en env a
+    # nivel de job y el `if:` del paso de Sonar compara `env.SONAR_TOKEN`.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,9 +34,7 @@ jobs:
       # es un paso manual en sonarcloud.io + GitHub, no algo que el código
       # pueda hacer por sí mismo. Ver PENDIENTES_SPRINT2.md, punto 3.
       - name: SonarCloud
-        if: ${{ secrets.SONAR_TOKEN != '' }}
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        if: ${{ env.SONAR_TOKEN != '' }}
         run: >
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar
           -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}

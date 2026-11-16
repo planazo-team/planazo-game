@@ -39,6 +39,12 @@ public interface GestorDeSalasEnVivoPort {
 
     void marcarReconectado(String salaId, String jugadorId);
 
+    /** El jugador dejó la pantalla: su serpiente se queda quieta. Tolerante si ya no está. */
+    void pausar(String salaId, String jugadorId);
+
+    /** El jugador volvió a la pantalla: su serpiente sigue donde iba. Tolerante si ya no está. */
+    void reanudar(String salaId, String jugadorId);
+
     /** Jugadores de cada sala que todavía no está en partida (espera o cuenta regresiva): salaId → jugadorIds. */
     Map<String, List<String>> jugadoresEnEspera();
 }

@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Emite JWTs HS256 firmados con el mismo secreto que
@@ -31,11 +32,21 @@ public class DevJwtTokenService {
     }
 
     public String generarToken(String jugadorId, String jugadorNombre) {
+        return generarToken(jugadorId, jugadorNombre, null);
+    }
+
+    /**
+     * {@code roles} alimenta el claim {@code roles} del JWT (infraestructura
+     * de autorización, ver {@code SecurityConfig#jwtAuthenticationConverter}):
+     * si se omite, el token sale con el rol por defecto {@code jugador}.
+     */
+    public String generarToken(String jugadorId, String jugadorNombre, List<String> roles) {
         try {
             Instant ahora = Instant.now();
             JWTClaimsSet claims = new JWTClaimsSet.Builder()
                     .subject(jugadorId)
                     .claim("nombre", jugadorNombre)
+                    .claim("roles", roles == null || roles.isEmpty() ? List.of("jugador") : roles)
                     .issuer("minijuego-service-dev")
                     .issueTime(Date.from(ahora))
                     .expirationTime(Date.from(ahora.plus(Duration.ofMinutes(jwtProperties.getExpiracionMinutosDevToken()))))

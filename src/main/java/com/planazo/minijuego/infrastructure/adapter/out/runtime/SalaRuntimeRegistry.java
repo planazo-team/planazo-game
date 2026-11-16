@@ -9,6 +9,8 @@ import com.planazo.minijuego.domain.model.Sala;
 import com.planazo.minijuego.domain.port.in.FinalizarPartidaUseCase;
 import com.planazo.minijuego.domain.port.out.GestorDeSalasEnVivoPort;
 import com.planazo.minijuego.domain.port.out.SalaCatalogoPort;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -41,17 +43,20 @@ public class SalaRuntimeRegistry implements GestorDeSalasEnVivoPort {
     private final FinalizarPartidaUseCase finalizarPartidaUseCase;
     private final SnapshotMapper snapshotMapper;
     private final GameBroadcaster broadcaster;
+    private final MeterRegistry meterRegistry;
     private final Map<String, SalaRuntime> runtimesPorSalaId = new ConcurrentHashMap<>();
     private ScheduledExecutorService scheduler;
 
     public SalaRuntimeRegistry(SalaCatalogoPort catalogo,
                                 FinalizarPartidaUseCase finalizarPartidaUseCase,
                                 SnapshotMapper snapshotMapper,
-                                GameBroadcaster broadcaster) {
+                                GameBroadcaster broadcaster,
+                                MeterRegistry meterRegistry) {
         this.catalogo = catalogo;
         this.finalizarPartidaUseCase = finalizarPartidaUseCase;
         this.snapshotMapper = snapshotMapper;
         this.broadcaster = broadcaster;
+        this.meterRegistry = meterRegistry;
     }
 
     @PostConstruct
@@ -70,6 +75,10 @@ public class SalaRuntimeRegistry implements GestorDeSalasEnVivoPort {
             Sala sala = new Sala(definicion.id(), definicion.codigo(), definicion.capacidad());
             SalaRuntime runtime = new SalaRuntime(sala, scheduler, finalizarPartidaUseCase, snapshotMapper, broadcaster, this::difundirSalas);
             runtimesPorSalaId.put(definicion.id(), runtime);
+            // Gauge de negocio (ESC-07): jugadores activos por sala, leído en vivo del runtime.
+            Gauge.builder("minijuego.jugadores.activos", runtime, r -> r.resumen().cantidadJugadores())
+                    .tag("sala", definicion.codigo())
+                    .register(meterRegistry);
         }
         log.info("Minijuego: {} salas cargadas desde el catálogo y listas para recibir jugadores.", runtimesPorSalaId.size());
     }

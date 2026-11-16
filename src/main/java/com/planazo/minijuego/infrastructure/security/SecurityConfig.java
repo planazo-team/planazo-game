@@ -48,7 +48,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
+                // CSRF no aplica: API sin estado con JWT en el header Authorization, sin cookies
+                // de sesión que el navegador mande solo (SessionCreationPolicy.STATELESS).
+                .csrf(csrf -> csrf.disable()) // NOSONAR: java:S4502 revisado, ver comentario
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(

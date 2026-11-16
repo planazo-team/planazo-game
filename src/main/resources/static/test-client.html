@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Minijuego Planazo — cliente de prueba</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js" integrity="sha512-1QvjE7BtotQjkq8PxLeF6P46gEpBRXuskzIVgjFpekzFVF4yjRgrQvTG1MTOJ3yQgvTteKAcO7DSZI92+u/yZw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js" integrity="sha512-iKDtgDyTHjAitUDdLljGhenhPwrbBfqTKWO1mkhSFH3A7blITC9MhYon6SjnMhp4o0rADGw9yAC6EW4t5a4K3g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; background: #111827; color: #e5e7eb; margin: 0; padding: 16px; }
@@ -41,7 +41,7 @@
       <div class="panel">
         <h2>1. Usuario</h2>
         <div class="fila">
-          <select id="selUsuario"></select>
+          <select id="selUsuario" aria-label="Usuario de prueba"></select>
           <button id="btnToken">Entrar</button>
         </div>
         <div class="fila"><span id="estadoToken">Sin autenticar</span> <span id="conexion"></span></div>

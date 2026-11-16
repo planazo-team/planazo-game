@@ -68,12 +68,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        # Sin metrics/prometheus aquí a propósito: MetricasJuego ya las sirve
+        # en un puerto interno (9464), solo red privada — el dominio público
+        # de game nunca debe servir métricas.
+        include: health,info
   endpoint:
     health:
       show-details: when-authorized
   metrics:
     tags:
+      service: game
+      instance: ${RAILWAY_REPLICA_ID:${HOSTNAME:local}}
       application: ${spring.application.name}
 
 logging:

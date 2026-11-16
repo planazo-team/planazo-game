@@ -107,7 +107,8 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        <!-- Expone /actuator/prometheus para las métricas de negocio y técnicas del minijuego. -->
+        <!-- Métricas en formato Prometheus (Feature 10.4): las publica MetricasJuego en un puerto interno;
+             también alimenta las métricas de negocio de FinalizarPartidaService/SalaRuntimeRegistry. -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>

@@ -162,6 +162,33 @@ public class SalaRuntime {
         difundirEstado(null);
     }
 
+    /** Tolerante: la pestaña puede ocultarse justo cuando la partida terminó y la sala se vació. */
+    public void pausar(String jugadorId) {
+        lock.lock();
+        try {
+            if (!sala.tieneJugador(jugadorId)) {
+                return;
+            }
+            sala.pausarJugador(jugadorId);
+        } finally {
+            lock.unlock();
+        }
+        difundirEstado(null);
+    }
+
+    public void reanudar(String jugadorId) {
+        lock.lock();
+        try {
+            if (!sala.tieneJugador(jugadorId)) {
+                return;
+            }
+            sala.reanudarJugador(jugadorId);
+        } finally {
+            lock.unlock();
+        }
+        difundirEstado(null);
+    }
+
     /** Sin lock: la cola es concurrente y el único consumidor es {@link #ejecutarTick()}. */
     public void encolarMovimiento(String jugadorId, Direccion direccion) {
         colaMovimientos.add(new ComandoMovimiento(jugadorId, direccion));

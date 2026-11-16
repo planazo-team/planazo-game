@@ -48,7 +48,8 @@ public class SnapshotMapper {
                 serpiente.direccion().name(),
                 serpiente.estado().name(),
                 serpiente.puntaje(),
-                serpiente.estaConectado()
+                serpiente.estaConectado(),
+                serpiente.estaPausada()
         );
     }
 }

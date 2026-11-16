@@ -20,6 +20,12 @@ public interface JugarPartidaUseCase {
 
     void manejarReconexion(String salaId, String jugadorId);
 
+    /** El jugador salió de la pantalla (otra pestaña u otra app): su serpiente se pausa. */
+    void pausarSerpiente(String salaId, String jugadorId);
+
+    /** El jugador volvió a la pantalla: su serpiente retoma donde iba. */
+    void reanudarSerpiente(String salaId, String jugadorId);
+
     /** Quiénes están en salas que aún no arrancan: salaId → jugadorIds. */
     Map<String, List<String>> jugadoresEnSalaDeEspera();
 

@@ -25,6 +25,8 @@ class LimpiadorDeSalasTest {
         @Override public void moverSerpiente(String salaId, String jugadorId, Direccion direccion) {}
         @Override public void manejarDesconexion(String salaId, String jugadorId) {}
         @Override public void manejarReconexion(String salaId, String jugadorId) {}
+        @Override public void pausarSerpiente(String salaId, String jugadorId) {}
+        @Override public void reanudarSerpiente(String salaId, String jugadorId) {}
         @Override public Map<String, List<String>> jugadoresEnSalaDeEspera() { return enEspera; }
 
         @Override

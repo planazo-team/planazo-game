@@ -34,6 +34,16 @@ public class PartidaService implements JugarPartidaUseCase {
     }
 
     @Override
+    public void pausarSerpiente(String salaId, String jugadorId) {
+        salasEnVivo.pausar(salaId, jugadorId);
+    }
+
+    @Override
+    public void reanudarSerpiente(String salaId, String jugadorId) {
+        salasEnVivo.reanudar(salaId, jugadorId);
+    }
+
+    @Override
     public Map<String, List<String>> jugadoresEnSalaDeEspera() {
         return salasEnVivo.jugadoresEnEspera();
     }

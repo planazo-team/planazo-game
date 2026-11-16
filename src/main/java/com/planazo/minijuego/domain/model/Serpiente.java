@@ -28,6 +28,8 @@ public class Serpiente {
     public static final int LONGITUD_INICIAL = 4;
     /** Giros que se recuerdan entre pasos: "arriba + izquierda" rápido entra en dos pasos seguidos. */
     public static final int MAX_GIROS_PENDIENTES = 2;
+    /** Pasos que la serpiente se queda quieta al volver de una pausa o desconexión, para que el jugador se ubique. */
+    public static final int PASOS_DE_RESPIRO_AL_VOLVER = 4;
 
     private final String jugadorId;
     private final String jugadorNombre;
@@ -38,6 +40,8 @@ public class Serpiente {
     private int puntaje;
     private long ultimoCambioEstado;
     private boolean conectado = true;
+    private boolean pausada;
+    private int pasosDeRespiro;
 
     public Serpiente(String jugadorId, String jugadorNombre, Posicion cabeza, Direccion direccionInicial) {
         this.jugadorId = jugadorId;
@@ -63,7 +67,12 @@ public class Serpiente {
         this.girosPendientes.clear();
         this.estado = EstadoSerpiente.VIVA;
         this.puntaje = 0;
+        this.pasosDeRespiro = 0;
         this.ultimoCambioEstado = System.currentTimeMillis();
+        if (pausada || !conectado) {
+            // Arranca la partida sin el jugador frente a la pantalla: nace quieta.
+            this.estado = EstadoSerpiente.DESCONECTADA_CONGELADA;
+        }
     }
 
     /**
@@ -132,12 +141,55 @@ public class Serpiente {
         }
     }
 
+    /** Volvió el socket. Si además pausó (la pestaña sigue oculta), sigue quieta hasta {@link #reanudar()}. */
     public void reconectar() {
         this.conectado = true;
-        if (estado == EstadoSerpiente.DESCONECTADA_CONGELADA) {
-            this.estado = EstadoSerpiente.VIVA;
+        descongelarSiCorresponde();
+    }
+
+    /**
+     * El jugador dejó la pantalla (cambió de pestaña o de app) con el socket
+     * vivo: la serpiente se queda quieta donde está, igual que congelada,
+     * hasta que vuelva ({@link #reanudar()}).
+     */
+    public void pausar() {
+        this.pausada = true;
+        this.girosPendientes.clear();
+        if (estado == EstadoSerpiente.VIVA) {
+            this.estado = EstadoSerpiente.DESCONECTADA_CONGELADA;
             this.ultimoCambioEstado = System.currentTimeMillis();
         }
+    }
+
+    /** El jugador volvió a la pantalla: retoma exactamente donde iba, tras un respiro corto. */
+    public void reanudar() {
+        this.pausada = false;
+        descongelarSiCorresponde();
+    }
+
+    private void descongelarSiCorresponde() {
+        if (estado == EstadoSerpiente.DESCONECTADA_CONGELADA && conectado && !pausada) {
+            this.estado = EstadoSerpiente.VIVA;
+            this.pasosDeRespiro = PASOS_DE_RESPIRO_AL_VOLVER;
+            this.ultimoCambioEstado = System.currentTimeMillis();
+        }
+    }
+
+    public boolean estaPausada() {
+        return pausada;
+    }
+
+    /**
+     * ¿Se queda quieta en este paso? Recién vuelta de una pausa, la serpiente
+     * espera {@link #PASOS_DE_RESPIRO_AL_VOLVER} pasos antes de avanzar. Cada
+     * llamada consume uno.
+     */
+    boolean tomarRespiro() {
+        if (pasosDeRespiro <= 0) {
+            return false;
+        }
+        pasosDeRespiro--;
+        return true;
     }
 
     public void eliminar() {

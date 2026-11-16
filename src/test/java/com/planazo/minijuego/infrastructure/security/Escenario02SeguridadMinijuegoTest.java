@@ -79,7 +79,8 @@ class Escenario02SeguridadMinijuegoTest {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .subject(jugadorId)
                 .claim("nombre", nombre)
-                .issueTime(Date.from(ahora))
+                // Un token vencido se emitió antes de vencer: iat < exp (si no, Nimbus lo rechaza por otra razón).
+                .issueTime(Date.from(duracion.isNegative() ? ahora.plus(duracion).minus(Duration.ofMinutes(15)) : ahora))
                 .expirationTime(Date.from(ahora.plus(duracion)))
                 .build();
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
@@ -170,6 +171,8 @@ class Escenario02SeguridadMinijuegoTest {
 
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.addNativeHeader("Authorization", "Bearer " + tokenValido);
+        // Como en el canal real de Spring: el interceptor debe poder fijar el usuario en los headers.
+        accessor.setLeaveMutable(true);
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
         Message<?> resultado = stompInterceptor.preSend(message, messageChannel);

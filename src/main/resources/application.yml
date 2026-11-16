@@ -69,6 +69,10 @@ management:
     web:
       exposure:
         include: health,info
+  metrics:
+    tags:
+      service: game
+      instance: ${RAILWAY_REPLICA_ID:${HOSTNAME:local}}
   endpoint:
     health:
       show-details: when-authorized

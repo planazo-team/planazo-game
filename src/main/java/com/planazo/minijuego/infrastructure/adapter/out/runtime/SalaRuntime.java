@@ -9,6 +9,8 @@ import com.planazo.minijuego.domain.model.ResultadoPartida;
 import com.planazo.minijuego.domain.model.ResumenSala;
 import com.planazo.minijuego.domain.model.Sala;
 import com.planazo.minijuego.domain.port.in.FinalizarPartidaUseCase;
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -262,12 +264,16 @@ public class SalaRuntime {
     }
 
     private void ejecutarTickSeguro() {
+        Timer.Sample muestra = Timer.start(Metrics.globalRegistry);
         try {
             ejecutarTick();
         } catch (Exception ex) {
             // Un tick nunca puede tumbar el hilo compartido del scheduler: si algo
             // sale mal en una sala, esa sala se detiene, pero no se lleva a las demás.
             log.error("Error inesperado en el tick de la sala {}: {}", sala.id(), ex.getMessage(), ex);
+        } finally {
+            // Duración de cada tick (RT-3: debe caber de sobra en los 50 ms del periodo).
+            muestra.stop(Metrics.timer("planazo.game.tick"));
         }
     }
 
@@ -347,6 +353,7 @@ public class SalaRuntime {
      * partida terminó para todos y no arranca otra sola.
      */
     private void finalizarYReiniciar(ResultadoPartida resultado) {
+        Metrics.counter("planazo.partidas", "motivo", String.valueOf(resultado.motivoVictoria())).increment();
         difundirEstado(resultado);
         try {
             finalizarPartidaUseCase.finalizarPartida(resultado);

@@ -39,7 +39,7 @@ que hoy no tiene ni Prometheus ni Grafana en el `docker-compose.yml`).
 
 ## 3. Mantenibilidad — SonarCloud en CI (Escenario de calidad: Mantenibilidad)
 
-- [x] Código listo.
+- [x] Código listo (en los 7 repos, no solo en este).
 - [ ] Falta el paso manual (no es código): crear el proyecto en
       sonarcloud.io y guardar `SONAR_TOKEN` (y opcionalmente
       `SONAR_ORGANIZATION` / `SONAR_PROJECT_KEY`) como secret del repo en
@@ -47,7 +47,13 @@ que hoy no tiene ni Prometheus ni Grafana en el `docker-compose.yml`).
 
 `.github/workflows/ci.yml` ya tiene el paso de SonarCloud, condicionado a
 que el secret `SONAR_TOKEN` exista (`if: ${{ secrets.SONAR_TOKEN != '' }}`)
-para no romper el build mientras no esté configurado.
+para no romper el build mientras no esté configurado. Se agregó además el
+plugin `jacoco-maven-plugin` al `pom.xml` (no existía) para que el paso de
+Sonar tenga cobertura real que reportar (`target/site/jacoco/jacoco.xml`),
+verificado con `mvn verify`. El mismo patrón (con lcov en vez de JaCoCo) se
+replicó en api-gateway, booking, promo, realtime e infra — detalle completo
+en `planazo-infra/ESCENARIO-05-MANTENIBILIDAD.md`, incluyendo los pasos
+manuales exactos que faltan en sonarcloud.io/GitHub.
 
 ## 4. Disponibilidad — escalamiento horizontal (Escenario de calidad: Disponibilidad)
 

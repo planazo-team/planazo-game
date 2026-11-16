@@ -6,3 +6,7 @@ target/
 .env
 .DS_Store
 HELP.md
+
+# Restos de cuando el servicio era NestJS: no van en el repo
+node_modules/
+dist/

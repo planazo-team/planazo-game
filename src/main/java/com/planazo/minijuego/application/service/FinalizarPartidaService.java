@@ -6,6 +6,8 @@ import com.planazo.minijuego.domain.port.in.FinalizarPartidaUseCase;
 import com.planazo.minijuego.domain.port.out.EventPublisherPort;
 import com.planazo.minijuego.domain.port.out.LeaderboardPort;
 import com.planazo.minijuego.domain.port.out.ResultadoPartidaRepositoryPort;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,13 +26,18 @@ public class FinalizarPartidaService implements FinalizarPartidaUseCase {
     private final ResultadoPartidaRepositoryPort resultadoRepository;
     private final LeaderboardPort leaderboard;
     private final EventPublisherPort eventPublisher;
+    private final MeterRegistry meterRegistry;
+    private final Counter puntajesRegistrados;
 
     public FinalizarPartidaService(ResultadoPartidaRepositoryPort resultadoRepository,
                                     LeaderboardPort leaderboard,
-                                    EventPublisherPort eventPublisher) {
+                                    EventPublisherPort eventPublisher,
+                                    MeterRegistry meterRegistry) {
         this.resultadoRepository = resultadoRepository;
         this.leaderboard = leaderboard;
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
+        this.puntajesRegistrados = meterRegistry.counter("minijuego.puntajes.registrados");
     }
 
     /**
@@ -42,10 +49,12 @@ public class FinalizarPartidaService implements FinalizarPartidaUseCase {
     @Override
     public void finalizarPartida(ResultadoPartida resultado) {
         resultadoRepository.guardar(resultado);
+        meterRegistry.counter("minijuego.partidas.jugadas", "motivo", resultado.motivoVictoria().name()).increment();
 
         try {
             for (PuntajeJugador puntaje : resultado.puntajes()) {
                 leaderboard.registrarPuntaje(puntaje.jugadorId(), puntaje.jugadorNombre(), puntaje.puntaje());
+                puntajesRegistrados.increment();
             }
         } catch (Exception ex) {
             log.warn("No se pudo actualizar el leaderboard en Redis para la partida de la sala {}: {}",

@@ -37,8 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  *
  * <p>Puntos de aparición usados abajo: j1 nace en (4,2) mirando a la
  * DERECHA con el cuerpo en x 1..4; j2 en (19,15) mirando a la IZQUIERDA.
- * Snake clásico: las serpientes avanzan solas cada
- * {@link Sala#MILISEGUNDOS_POR_PASO} ms del reloj mutable.
+ * La serpiente nunca avanza sola: cada {@link Sala#moverJugador} gira y
+ * avanza una celda en el mismo gesto; {@link Sala#tick()} solo resuelve lo
+ * que depende del reloj (cuenta regresiva, congelaciones, tiempo límite).
  */
 class SalaTest {
 
@@ -120,91 +121,86 @@ class SalaTest {
     }
 
     @Test
-    void antesDelPrimerPaso_nadieSeMueve_yLuegoAvanzanSolas() { // SNK-04, Snake clásico
+    void sinComandoDeMovimiento_laSerpienteNoAvanzaAunquePaseElTiempo() { // el punto central del cambio
         Sala sala = partidaDeDos();
-        var cuerpoAntes = buscar(sala, "j1").cuerpoInmutable();
+        var cuerpoJ1Antes = buscar(sala, "j1").cuerpoInmutable();
+        var cuerpoJ2Antes = buscar(sala, "j2").cuerpoInmutable();
 
-        sala.tick(); // aún dentro del respiro inicial
-        assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpoAntes);
+        for (int i = 0; i < 20; i++) {
+            reloj.avanzar(Duration.ofMillis(50));
+            sala.tick();
+        }
 
-        primerPaso(sala);
-
-        // startsWith y no containsExactly: si la comida cayó justo ahí, la serpiente creció.
-        assertThat(buscar(sala, "j1").cuerpoInmutable()).startsWith(
-                new Posicion(5, 2), new Posicion(4, 2), new Posicion(3, 2), new Posicion(2, 2));
-        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(18, 15));
+        assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpoJ1Antes);
+        assertThat(buscar(sala, "j2").cuerpoInmutable()).isEqualTo(cuerpoJ2Antes);
+        assertThat(sala.pasosDados()).isZero();
     }
 
     @Test
-    void sinTocarNada_avanzaUnaCeldaPorPaso() {
+    void cadaComandoValido_avanzaExactamenteUnaCeldaYNoMas() { // SNK-04
         Sala sala = partidaDeDos();
-        primerPaso(sala);
-        paso(sala);
-        paso(sala);
 
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(7, 2));
-        assertThat(sala.pasosDados()).isEqualTo(3);
-    }
-
-    @Test
-    void unTickAntesDeTiempo_noDaPaso() {
-        Sala sala = partidaDeDos();
-        primerPaso(sala);
-        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_POR_PASO - 10));
-        sala.tick();
-
+        sala.moverJugador("j1", Direccion.DERECHA); // sigue derecho: un paso
         assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2));
+        assertThat(sala.pasosDados()).isEqualTo(1);
+
+        sala.moverJugador("j1", Direccion.DERECHA);
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(6, 2));
+        assertThat(sala.pasosDados()).isEqualTo(2);
+
+        // j2 no recibió ningún comando: sigue exactamente donde nació.
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(19, 15));
     }
 
     @Test
-    void girar_cambiaLaDireccionEnElProximoPaso() { // SNK-04
+    void moverJugador_giraYAvanzaDeInmediatoEnElMismoComando() { // SNK-04
         Sala sala = partidaDeDos();
 
         sala.moverJugador("j1", Direccion.ABAJO);
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2)); // girar no mueve
-
-        primerPaso(sala);
         Serpiente j1 = buscar(sala, "j1");
         assertThat(j1.cuerpoInmutable()).startsWith(
                 new Posicion(4, 3), new Posicion(4, 2), new Posicion(3, 2), new Posicion(2, 2));
-        paso(sala);
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 4)); // sigue hacia abajo
+
+        sala.moverJugador("j1", Direccion.ABAJO); // repetir la dirección: sigue hacia abajo
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 4));
     }
 
     @Test
-    void dosGirosRapidos_seAplicanEnPasosSeguidos() {
+    void comandosConsecutivosEnDistintaDireccion_cadaUnoAvanzaUnPaso() {
         Sala sala = partidaDeDos();
 
         sala.moverJugador("j1", Direccion.ABAJO);
-        sala.moverJugador("j1", Direccion.IZQUIERDA); // válido después de ABAJO
-
-        primerPaso(sala);
         assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 3));
-        paso(sala);
+
+        sala.moverJugador("j1", Direccion.IZQUIERDA); // válido después de ABAJO
         assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(3, 3));
     }
 
     @Test
-    void darMediaVueltaSobreElCuello_seIgnora() {
+    void darMediaVueltaSobreElCuello_seIgnora_yNoCuentaComoPaso() {
         Sala sala = partidaDeDos();
 
-        sala.moverJugador("j1", Direccion.IZQUIERDA); // j1 mira a la derecha
-        primerPaso(sala);
+        boolean terminada = sala.moverJugador("j1", Direccion.IZQUIERDA); // j1 mira a la derecha
 
-        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2)); // siguió derecho
+        assertThat(terminada).isFalse();
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(4, 2)); // no se movió
         assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.VIVA);
+        assertThat(sala.pasosDados()).isZero();
+
+        sala.moverJugador("j1", Direccion.DERECHA); // esta sí es válida
+        assertThat(buscar(sala, "j1").cabeza()).isEqualTo(new Posicion(5, 2));
     }
 
     @Test
     void cabezaContraElCuerpoDeOtra_muere_yGanaLaUltimaEnPie() { // SNK-08 + SNK-09/10
         Sala sala = partidaDeDos();
-        // j1 baja por la columna 4; j2 viene por la fila 15 hacia la izquierda y
-        // su cabeza llega a (4,15) cuando esa celda ya es cuerpo de j1.
-        sala.moverJugador("j1", Direccion.ABAJO);
-
-        boolean terminada = primerPaso(sala);
-        for (int i = 0; i < 20 && !terminada; i++) {
-            terminada = paso(sala);
+        // j1 baja por la columna 4 (15 pasos: cabeza llega a (4,17), cuerpo
+        // cubre 14..17); j2 viene por la fila 15 hacia la izquierda y su
+        // cabeza llega a (4,15) justo cuando esa celda ya es cuerpo de j1.
+        boolean terminada = false;
+        for (int i = 0; i < 15 && !terminada; i++) {
+            sala.moverJugador("j1", Direccion.ABAJO);
+            terminada = sala.moverJugador("j2", Direccion.IZQUIERDA);
         }
 
         assertThat(terminada).isTrue();
@@ -215,21 +211,27 @@ class SalaTest {
     }
 
     @Test
-    void dosCabezasEnLaMismaCelda_muerenLasDos() {
+    void dosCabezasConvergenEnLaMismaCelda_soloMuereLaQueLlegaSegunda() {
+        // Al no haber paso simultáneo, "dos cabezas en la misma celda" ya no
+        // mata a las dos: la primera en llegar se queda quieta ahí (sigue
+        // siendo obstáculo) y solo muere la que se mueve encima después.
         Sala sala = partidaDeDos();
-        // j1 da un paso a la derecha y baja por la columna 5; j2 va por la fila 15
-        // hacia la izquierda: en el paso 14 las dos cabezas llegan a (5,15).
-        primerPaso(sala);
-        sala.moverJugador("j1", Direccion.ABAJO);
-        boolean terminada = false;
-        for (int i = 0; i < 20 && !terminada; i++) {
-            terminada = paso(sala);
-        }
 
-        assertThat(terminada).isTrue();
+        sala.moverJugador("j1", Direccion.DERECHA); // (5,2)
+        for (int i = 0; i < 12; i++) {
+            sala.moverJugador("j1", Direccion.ABAJO); // (5,14)
+        }
+        for (int i = 0; i < 14; i++) {
+            sala.moverJugador("j2", Direccion.IZQUIERDA); // llega primero a (5,15) y se queda
+        }
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(5, 15));
+        assertThat(buscar(sala, "j2").estado()).isEqualTo(EstadoSerpiente.VIVA);
+
+        boolean terminada = sala.moverJugador("j1", Direccion.ABAJO); // choca con la cabeza quieta de j2
+
         assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
-        assertThat(buscar(sala, "j2").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
-        assertThat(sala.construirResultado().motivoVictoria()).isEqualTo(MotivoVictoria.EMPATE_TODOS_ELIMINADOS);
+        assertThat(buscar(sala, "j2").estado()).isEqualTo(EstadoSerpiente.VIVA); // j2 no se movió: no choca
+        assertThat(terminada).isTrue(); // último en pie: j2
     }
 
     @Test
@@ -240,10 +242,9 @@ class SalaTest {
         sala.unirse("j3", "Camila");
         arrancar(sala);
 
-        sala.moverJugador("j1", Direccion.ARRIBA);
-        primerPaso(sala); // (4,1)
-        paso(sala);       // (4,0)
-        paso(sala);       // borde
+        sala.moverJugador("j1", Direccion.ARRIBA); // (4,1)
+        sala.moverJugador("j1", Direccion.ARRIBA); // (4,0)
+        sala.moverJugador("j1", Direccion.ARRIBA); // borde
 
         assertThat(buscar(sala, "j1").estado()).isEqualTo(EstadoSerpiente.ELIMINADA);
         assertThat(sala.estado()).isEqualTo(EstadoSala.EN_CURSO); // j2 y j3 siguen vivos
@@ -253,10 +254,9 @@ class SalaTest {
     void ultimoEnPie_ganaElSobreviviente_aunqueElEliminadoFueraPrimeroEnLaLista() { // SNK-09/10
         Sala sala = partidaDeDos();
 
-        sala.moverJugador("j1", Direccion.ARRIBA);
-        primerPaso(sala);
-        paso(sala);
-        boolean terminada = paso(sala);
+        sala.moverJugador("j1", Direccion.ARRIBA); // (4,1)
+        sala.moverJugador("j1", Direccion.ARRIBA); // (4,0)
+        boolean terminada = sala.moverJugador("j1", Direccion.ARRIBA); // borde: elimina a j1
 
         assertThat(terminada).isTrue();
         ResultadoPartida resultado = sala.construirResultado();
@@ -265,16 +265,28 @@ class SalaTest {
     }
 
     @Test
-    void unaSerpienteCongelada_noAvanza_peroSigueSiendoObstaculo() { // SNK-07
+    void unaSerpienteCongelada_noPuedeMoverse_peroSigueSiendoObstaculo() { // SNK-07
         Sala sala = partidaDeDos();
         sala.marcarDesconectado("j1");
         var cuerpo = buscar(sala, "j1").cuerpoInmutable();
 
-        primerPaso(sala);
-        paso(sala);
+        boolean terminada = sala.moverJugador("j2", Direccion.IZQUIERDA);
 
+        assertThat(terminada).isFalse();
         assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpo);
-        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(17, 15)); // la otra sí avanza
+        assertThat(buscar(sala, "j2").cabeza()).isEqualTo(new Posicion(18, 15));
+    }
+
+    @Test
+    void moverJugador_sobreUnaSerpienteCongelada_seIgnoraEnSilencio() { // SNK-07
+        Sala sala = partidaDeDos();
+        sala.marcarDesconectado("j1");
+        var cuerpo = buscar(sala, "j1").cuerpoInmutable();
+
+        boolean terminada = sala.moverJugador("j1", Direccion.ABAJO);
+
+        assertThat(terminada).isFalse();
+        assertThat(buscar(sala, "j1").cuerpoInmutable()).isEqualTo(cuerpo); // no se movió: está congelada
     }
 
     @Test
@@ -378,18 +390,6 @@ class SalaTest {
         reloj.avanzar(Duration.ofSeconds(Sala.SEGUNDOS_CUENTA_REGRESIVA));
         sala.tick();
         assertThat(sala.estado()).isEqualTo(EstadoSala.EN_CURSO);
-    }
-
-    /** Termina el respiro inicial y da el primer paso. */
-    private boolean primerPaso(Sala sala) {
-        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_ANTES_DEL_PRIMER_PASO));
-        return sala.tick();
-    }
-
-    /** Avanza el reloj lo justo para un paso más. */
-    private boolean paso(Sala sala) {
-        reloj.avanzar(Duration.ofMillis(Sala.MILISEGUNDOS_POR_PASO));
-        return sala.tick();
     }
 
     private static Serpiente buscar(Sala sala, String jugadorId) {

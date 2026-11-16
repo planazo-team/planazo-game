@@ -264,8 +264,10 @@ public class SalaRuntime {
                     }
                 }
                 case EN_CURSO -> {
-                    aplicarGiros();
-                    boolean terminada = sala.tick(); // paso de las serpientes, reloj y desconexiones
+                    boolean terminada = aplicarComandosDeMovimiento();
+                    if (!terminada) {
+                        terminada = sala.tick(); // reloj y desconexiones; ya no mueve a nadie
+                    }
                     if (sala.pasosDados() != ultimoPasoDifundido) {
                         ultimoPasoDifundido = sala.pasosDados();
                         difundir = true;
@@ -296,19 +298,26 @@ public class SalaRuntime {
     }
 
     /**
-     * Pasa a la sala los giros que llegaron desde el último tick. Las
-     * serpientes avanzan solas dentro de {@link Sala#tick()}; un giro solo
-     * cambia hacia dónde irá el próximo paso. Requiere el lock.
+     * Aplica, en orden de llegada, los comandos de movimiento encolados
+     * desde el último tick. Cada uno gira y avanza a su serpiente de
+     * inmediato ({@link Sala#moverJugador}) — ya no hay avance automático
+     * de posición, así que esta es la única vía por la que una serpiente se
+     * mueve. Si un comando termina la partida, el resto de la cola para
+     * esta sala queda sin aplicar (se descarta al reiniciar el loop).
+     * Requiere el lock.
      */
-    private void aplicarGiros() {
+    private boolean aplicarComandosDeMovimiento() {
         ComandoMovimiento comando;
         while ((comando = colaMovimientos.poll()) != null) {
             try {
-                sala.moverJugador(comando.jugadorId(), comando.direccion());
+                if (sala.moverJugador(comando.jugadorId(), comando.direccion())) {
+                    return true;
+                }
             } catch (DomainException ex) {
-                log.debug("Giro descartado en sala {}: {}", sala.id(), ex.getMessage());
+                log.debug("Movimiento descartado en sala {}: {}", sala.id(), ex.getMessage());
             }
         }
+        return false;
     }
 
     /**

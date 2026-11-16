@@ -51,7 +51,10 @@ public class AuthDevController {
                     .body(ApiError.de("USUARIO_DE_PRUEBA_NO_ENCONTRADO",
                             "'" + request.jugadorId() + "' no es uno de los usuarios de prueba. Consulta GET /api/v1/auth/usuarios-de-prueba."));
         }
-        String token = devJwtTokenService.generarToken(usuario.jugadorId(), usuario.nombre());
+        List<String> roles = (request.roles() == null || request.roles().isEmpty())
+                ? List.of("jugador")
+                : request.roles();
+        String token = devJwtTokenService.generarToken(usuario.jugadorId(), usuario.nombre(), roles);
         return ResponseEntity.ok(ApiResponse.de(DevTokenResponse.de(token, usuario.jugadorId(), usuario.nombre())));
     }
 }

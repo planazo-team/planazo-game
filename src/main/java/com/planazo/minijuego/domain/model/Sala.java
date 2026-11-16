@@ -10,12 +10,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -27,12 +24,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * <ul>
  *   <li>La partida solo arranca con la sala <b>llena</b>, tras una cuenta
  *       regresiva de {@link #SEGUNDOS_CUENTA_REGRESIVA} segundos.</li>
- *   <li>Snake clásico: todas las serpientes avanzan solas una celda cada
- *       {@link #MILISEGUNDOS_POR_PASO} ms ({@link #tick()}); el jugador solo
- *       gira ({@link #moverJugador}). Las congeladas por desconexión no se
- *       mueven, pero siguen siendo obstáculo.</li>
- *   <li>En cada paso todas avanzan a la vez: si dos cabezas llegan a la misma
- *       celda, mueren las dos.</li>
+ *   <li>La serpiente nunca avanza sola: cada paso requiere un comando de
+ *       movimiento nuevo del jugador ({@link #moverJugador}), que gira y
+ *       avanza una celda en el mismo gesto. Sin tecla nueva se queda quieta.
+ *       Las congeladas por desconexión no se pueden mover, pero siguen
+ *       siendo obstáculo.</li>
+ *   <li>Como cada jugador avanza a su propio ritmo (no hay paso simultáneo
+ *       de todas a la vez), dos cabezas solo "chocan de frente" si una se
+ *       mueve sobre la celda que la otra ya ocupa en ese instante.</li>
  *   <li>Si la cabeza de una serpiente toca un borde o cualquier cuerpo
  *       (el suyo o el de otra), esa serpiente muere. Gana la última en pie.</li>
  * </ul>
@@ -54,10 +53,6 @@ public class Sala {
     public static final int SEGUNDOS_CONGELACION_DESCONEXION = 15;
     public static final int SEGUNDOS_LIMITE_PARTIDA = 180;
     public static final int SEGUNDOS_CUENTA_REGRESIVA = 3;
-    /** Cada cuánto avanzan todas las serpientes una celda (~6,7 celdas por segundo). */
-    public static final int MILISEGUNDOS_POR_PASO = 150;
-    /** Respiro al arrancar antes del primer paso, para ubicarse en el tablero. */
-    public static final int MILISEGUNDOS_ANTES_DEL_PRIMER_PASO = 600;
 
     private final String id;
     private final String codigo;
@@ -68,7 +63,6 @@ public class Sala {
     private Posicion comida;
     private Instant iniciadaEn;
     private Instant cuentaRegresivaTerminaEn;
-    private Instant proximoPaso;
     private long pasosDados;
 
     public Sala(String id, String codigo, int capacidad) {
@@ -135,7 +129,6 @@ public class Sala {
         this.cuentaRegresivaTerminaEn = null;
         this.estado = EstadoSala.EN_CURSO;
         this.iniciadaEn = Instant.now(clock);
-        this.proximoPaso = iniciadaEn.plusMillis(MILISEGUNDOS_ANTES_DEL_PRIMER_PASO);
     }
 
     private void reubicarEnPuntosDeAparicion() {
@@ -188,89 +181,63 @@ public class Sala {
     // ---------------------------------------------------------------
 
     /**
-     * SNK-04: el jugador gira su serpiente hacia {@code direccion}. El giro se
-     * aplica en el próximo paso de la partida ({@link #tick()}); dar media
-     * vuelta sobre el propio cuello se ignora en silencio.
+     * SNK-04: el jugador pide que su serpiente gire hacia {@code direccion} y
+     * avance una celda — en el mismo gesto, de inmediato. No hay tick
+     * automático de posición: sin un comando nuevo la serpiente se queda
+     * quieta (esta es justo la diferencia con el Snake clásico de avance
+     * solo). Dar media vuelta sobre el propio cuello se ignora en silencio
+     * y no cuenta como paso.
      *
-     * @return false siempre: girar nunca termina la partida por sí solo (el
-     *         choque, si lo hay, ocurre en el paso).
+     * @return true si con este movimiento la partida terminó.
      */
     public boolean moverJugador(String jugadorId, Direccion direccion) {
         if (estado != EstadoSala.EN_CURSO) {
             throw new PartidaNoEnCursoException(id);
         }
         Serpiente serpiente = obtenerOLanzar(jugadorId);
-        if (serpiente.esControlablePorJugador()) {
-            serpiente.girarHacia(direccion);
+        if (!serpiente.esControlablePorJugador() || !serpiente.cambiarDireccion(direccion)) {
+            return false;
         }
-        return false;
+        return avanzarUnaCelda(serpiente);
     }
 
     /**
-     * Un paso de la partida: todas las serpientes controlables avanzan una
-     * celda a la vez. Primero se calculan todas las cabezas nuevas y después
-     * se decide quién choca, para que el orden de la lista no le dé ventaja a
-     * nadie: dos cabezas en la misma celda mueren las dos, y la cola de una
-     * serpiente que avanza sin comer queda libre en este mismo paso.
+     * Avanza solo a {@code serpiente} una celda en su dirección actual.
+     * Las demás serpientes no se tocan: cada jugador avanza a su propio
+     * ritmo, así que el choque contra el cuerpo de otra (incluida su
+     * cabeza, si está quieta en ese instante) se resuelve contra el estado
+     * actual del tablero, no contra un paso simultáneo de todas.
      *
      * @return true si con este paso la partida terminó.
      */
-    private boolean avanzarSerpientes() {
+    private boolean avanzarUnaCelda(Serpiente serpiente) {
         pasosDados++;
-        List<Serpiente> moviles = serpientes.values().stream().filter(Serpiente::esControlablePorJugador).toList();
-        Map<Serpiente, Direccion> direcciones = new HashMap<>();
-        Map<Serpiente, Posicion> cabezas = new HashMap<>();
-        Serpiente comedora = null;
-        for (Serpiente serpiente : moviles) {
-            Direccion hacia = serpiente.proximaDireccion();
-            Posicion cabeza = serpiente.proximaCabeza(hacia);
-            direcciones.put(serpiente, hacia);
-            cabezas.put(serpiente, cabeza);
-            if (comedora == null && cabeza.equals(comida)) {
-                comedora = serpiente;
+        Posicion cabeza = serpiente.proximaCabeza();
+        boolean come = cabeza.equals(comida);
+        if (!cabeza.dentroDe(ANCHO_TABLERO, ALTO_TABLERO) || chocaConCuerpo(serpiente, cabeza, come)) {
+            serpiente.eliminar();
+        } else {
+            serpiente.avanzar(cabeza, come);
+            if (come) {
+                comida = generarPosicionComidaLibre();
             }
-        }
-
-        Set<Serpiente> muertas = new HashSet<>();
-        for (Serpiente serpiente : moviles) {
-            Posicion cabeza = cabezas.get(serpiente);
-            if (!cabeza.dentroDe(ANCHO_TABLERO, ALTO_TABLERO) || chocaConCuerpo(cabeza, moviles, comedora)) {
-                muertas.add(serpiente);
-                continue;
-            }
-            for (Serpiente otra : moviles) {
-                if (otra != serpiente && cabezas.get(otra).equals(cabeza)) {
-                    muertas.add(serpiente); // de frente: mueren las dos
-                }
-            }
-        }
-
-        for (Serpiente serpiente : moviles) {
-            serpiente.consumirGiro();
-            if (muertas.contains(serpiente)) {
-                serpiente.eliminar();
-            } else {
-                serpiente.avanzar(direcciones.get(serpiente), cabezas.get(serpiente), serpiente == comedora);
-            }
-        }
-        if (comedora != null && !muertas.contains(comedora)) {
-            comida = generarPosicionComidaLibre();
         }
         return resolverSiPartidaDebeTerminar(false);
     }
 
     /**
      * ¿La celda {@code cabeza} cae sobre el cuerpo de alguna serpiente viva?
-     * La cola de las que avanzan en este paso sin comer se libera, así que
-     * perseguir una cola (propia o ajena) no es choque.
+     * Solo la cola de la propia serpiente que se mueve se libera cuando no
+     * come (el resto de serpientes está quieta en este instante, así que su
+     * cuerpo entero — cabeza incluida — sigue siendo obstáculo).
      */
-    private boolean chocaConCuerpo(Posicion cabeza, List<Serpiente> moviles, Serpiente comedora) {
+    private boolean chocaConCuerpo(Serpiente moviendose, Posicion cabeza, boolean come) {
         for (Serpiente otra : serpientes.values()) {
             if (!otra.estaViva()) {
                 continue; // el cuerpo de una serpiente muerta deja de ser obstáculo
             }
             List<Posicion> cuerpo = otra.cuerpoInmutable();
-            boolean liberaCola = moviles.contains(otra) && otra != comedora;
+            boolean liberaCola = otra == moviendose && !come;
             int limite = liberaCola ? cuerpo.size() - 1 : cuerpo.size();
             for (int i = 0; i < limite; i++) {
                 if (cuerpo.get(i).equals(cabeza)) {
@@ -287,13 +254,12 @@ public class Sala {
 
     /**
      * Llamado periódicamente por {@code SalaRuntime}. Resuelve todo lo que
-     * depende del tiempo: el fin de la cuenta regresiva, el paso de las
-     * serpientes cada {@link #MILISEGUNDOS_POR_PASO} ms, la expiración de
-     * congelamientos por desconexión (SNK-07) y el tiempo límite (SNK-09).
-     * Si el reloj saltó mucho, da un solo paso: nunca "recupera" pasos
-     * atrasados de golpe.
+     * depende del tiempo — no de un comando de jugador: el fin de la cuenta
+     * regresiva, la expiración de congelamientos por desconexión (SNK-07) y
+     * el tiempo límite (SNK-09). El avance de las serpientes NO vive aquí
+     * desde que dejó de ser automático: ver {@link #moverJugador}.
      *
-     * @return true si la partida terminó en este tick.
+     * @return true si la partida terminó en este tick (por tiempo agotado).
      */
     public boolean tick() {
         if (estado == EstadoSala.CUENTA_REGRESIVA && !Instant.now(clock).isBefore(cuentaRegresivaTerminaEn)) {
@@ -304,13 +270,6 @@ public class Sala {
             return false;
         }
         eliminarCongelacionesExpiradas();
-        Instant ahora = Instant.now(clock);
-        if (!ahora.isBefore(proximoPaso)) {
-            proximoPaso = ahora.plusMillis(MILISEGUNDOS_POR_PASO);
-            if (avanzarSerpientes()) {
-                return true;
-            }
-        }
         boolean tiempoAgotado = tiempoTranscurridoSegundos() >= SEGUNDOS_LIMITE_PARTIDA;
         return resolverSiPartidaDebeTerminar(tiempoAgotado);
     }
@@ -355,7 +314,6 @@ public class Sala {
         serpientes.clear();
         comida = null;
         iniciadaEn = null;
-        proximoPaso = null;
         cuentaRegresivaTerminaEn = null;
         this.estado = EstadoSala.ESPERANDO_JUGADORES;
     }

@@ -89,10 +89,14 @@
             <version>2.6.0</version>
         </dependency>
 
-        <!-- Observabilidad mínima -->
+        <!-- Observabilidad: /actuator/health,info + métricas técnicas y de negocio en /actuator/prometheus -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
         <!-- Pruebas -->

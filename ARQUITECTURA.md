@@ -151,6 +151,44 @@ de idempotencia. Se agrega el día
 que este servicio necesite reaccionar a un evento de otro microservicio
 de Planazo, siguiendo el mismo patrón.
 
+## Escalamiento horizontal (Disponibilidad)
+
+Hoy corre una sola instancia de `planazo-game`. El estado de cada sala vive
+en memoria dentro de su `SalaRuntime` (un hilo, una sala — ver arriba), así
+que dos instancias no comparten ese estado: si el "unirse" de un jugador
+cae en la instancia A y su "mover" por WebSocket cae en la B, cada una
+tiene su propia copia desincronizada de la sala. La lectura ya está
+resuelta para múltiples instancias — `RedisGameBroadcaster` publica el
+estado a un canal de Redis, así que cualquier `planazo-realtime` conectado
+a ese Redis puede reenviarlo sin importar qué instancia de `planazo-game`
+lo generó — pero la **escritura** (unirse/salir/mover, todo lo que
+muta un `SalaRuntime`) no tiene ninguna coordinación entre instancias.
+
+**Recomendación (pendiente de validar con el equipo): sticky sessions en
+el gateway/proxy, no Redis Pub/Sub para el estado de juego.**
+
+- *Sticky sessions por sala* (p.ej. el proxy enruta por el código de sala
+  en la URL o por la conexión WebSocket ya establecida, afinidad simple)
+  resuelve el escenario de disponibilidad sin tocar una sola línea de este
+  repositorio: cada sala sigue viviendo en una sola instancia, pero varias
+  instancias pueden repartirse las salas (y, lo que de verdad importa para
+  disponibilidad, una instancia caída solo se lleva sus propias salas, no
+  todas). Es la opción de menor riesgo y la que se puede levantar ya
+  mismo configurando el balanceador/proxy en `planazo-infra`.
+- *Redis Pub/Sub también para los comandos* (que cualquier instancia
+  pueda atender cualquier conexión) requeriría mover la autoridad sobre
+  `Sala`/`SalaRuntime` a un esquema distribuido (lock o actor por sala
+  respaldado en Redis, no en memoria de un solo proceso) — una
+  reescritura real de la sección de concurrencia de este documento, no
+  una opción de configuración. No se implementó en esta pasada: el riesgo
+  de introducir una condición de carrera en el game loop en tiempo real
+  (RT-3) sin poder probarlo con más de una instancia real no se justifica
+  frente a la alternativa de sticky sessions, que cubre el mismo escenario
+  de calidad con cambios fuera de este servicio.
+
+Levantar efectivamente más de una instancia (`replicas` + balanceador)
+sigue siendo trabajo de `planazo-infra`, fuera de este repositorio.
+
 ## Lo que este documento deliberadamente no decide todavía
 
 - Revancha en la misma sala, modo espectador y créditos (historias

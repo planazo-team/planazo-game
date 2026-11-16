@@ -21,3 +21,19 @@ jobs:
 
       - name: mvn verify (incluye ArchitectureRulesTest y SalaTest)
         run: mvn -B verify
+
+      # Escaneo de mantenibilidad (duplicación, code smells, cobertura). No
+      # falla el build si el secret no está configurado: falta crear el
+      # proyecto en SonarCloud y guardar SONAR_TOKEN (y opcionalmente
+      # SONAR_ORGANIZATION / SONAR_PROJECT_KEY) como secret del repo — eso
+      # es un paso manual en sonarcloud.io + GitHub, no algo que el código
+      # pueda hacer por sí mismo. Ver PENDIENTES_SPRINT2.md, punto 3.
+      - name: SonarCloud
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar
+          -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+          -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY || 'planazo-game' }}
+          -Dsonar.host.url=https://sonarcloud.io
